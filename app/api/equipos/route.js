@@ -23,7 +23,17 @@ export async function GET() {
         },
       },
     });
-    return NextResponse.json(equipos);
+    return NextResponse.json(
+      equipos.map(e => ({
+        id: e.id,
+        nombre: e.nombre,
+        modelo: e.modelo,
+        serial: e.serial,
+        clienteId: e.clienteId,
+        clienteNombre: e.cliente?.nombre || '-',
+        visitasCount: e._count.visitas,
+      }))
+    );
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

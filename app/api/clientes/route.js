@@ -18,7 +18,17 @@ export async function GET() {
         },
       },
     });
-    return NextResponse.json(clientes);
+    return NextResponse.json(
+      clientes.map(c => ({
+        id: c.id,
+        nombre: c.nombre,
+        email: c.email,
+        telefono: c.telefono,
+        direccion: c.direccion,
+        equiposCount: c._count.equipos,
+        visitasCount: c._count.visitas,
+      }))
+    );
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

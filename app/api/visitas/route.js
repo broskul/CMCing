@@ -31,7 +31,24 @@ export async function GET() {
         },
       },
     });
-    return NextResponse.json(visitas);
+    return NextResponse.json(
+      visitas.map(v => ({
+        id: v.id,
+        fecha: v.fecha,
+        descripcion: v.descripcion,
+        estado: v.estado,
+        clienteId: v.clienteId,
+        equipoId: v.equipoId,
+        tecnicoId: v.tecnicoId,
+        vendedorId: v.vendedorId,
+        servicioId: v.servicioId,
+        clienteNombre: v.cliente?.nombre || '-',
+        equipoNombre: v.equipo?.nombre || '-',
+        tecnicoNombre: v.tecnico?.nombre || '-',
+        vendedorNombre: v.vendedor?.nombre || '-',
+        servicioDescripcion: v.servicio?.descripcion || '-',
+      }))
+    );
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
