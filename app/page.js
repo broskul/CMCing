@@ -8,18 +8,9 @@ export default function Dashboard() {
 useEffect(() => {
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/clientes');
-      const clientes = await res.json();
-
-      const equipos = clientes.flatMap(c => c.equipos || []);
-      const visitas = clientes.flatMap(c => c.visitas || []);
-
-      setStats({
-        clientes: clientes.length,
-        equipos: equipos.length,
-        visitas: visitas.length,
-      });
-
+      const res = await fetch('/api/dashboard');
+      const data = await res.json();
+      setStats(data);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }

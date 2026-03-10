@@ -4,12 +4,31 @@ import { prisma } from '../../lib/prisma';
 export async function GET() {
   try {
     const visitas = await prisma.visita.findMany({
-      include: {
-        cliente: true,
-        equipo: true,
-        tecnico: true,
-        vendedor: true,
-        servicio: true,
+      select: {
+        id: true,
+        fecha: true,
+        descripcion: true,
+        estado: true,
+        clienteId: true,
+        equipoId: true,
+        tecnicoId: true,
+        vendedorId: true,
+        servicioId: true,
+        cliente: {
+          select: { id: true, nombre: true },
+        },
+        equipo: {
+          select: { id: true, nombre: true },
+        },
+        tecnico: {
+          select: { id: true, nombre: true },
+        },
+        vendedor: {
+          select: { id: true, nombre: true },
+        },
+        servicio: {
+          select: { id: true, descripcion: true },
+        },
       },
     });
     return NextResponse.json(visitas);

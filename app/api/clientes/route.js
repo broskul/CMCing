@@ -4,9 +4,18 @@ import { prisma } from '../../lib/prisma';
 export async function GET() {
   try {
     const clientes = await prisma.cliente.findMany({
-      include: {
-        equipos: true,
-        visitas: true,
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+        _count: {
+          select: {
+            equipos: true,
+            visitas: true,
+          },
+        },
       },
     });
     return NextResponse.json(clientes);

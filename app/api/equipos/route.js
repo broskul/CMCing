@@ -4,9 +4,23 @@ import { prisma } from '../../lib/prisma';
 export async function GET() {
   try {
     const equipos = await prisma.equipo.findMany({
-      include: {
-        cliente: true,
-        visitas: true,
+      select: {
+        id: true,
+        nombre: true,
+        modelo: true,
+        serial: true,
+        clienteId: true,
+        cliente: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+        _count: {
+          select: {
+            visitas: true,
+          },
+        },
       },
     });
     return NextResponse.json(equipos);
