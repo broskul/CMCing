@@ -1,22 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# CMCing - Gestión de Servicios Médicos
 
-## Getting Started
+Aplicación web para gestionar visitas y servicios técnicos de equipos médicos para la empresa CMCing.
 
-First, run the development server:
+## Características
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Dashboard con estadísticas
+- Backoffice para gestionar clientes, equipos, servicios, vendedores y técnicos
+- Página para crear nuevas visitas/servicios
+- Diseño moderno con gradientes y transparencias
+- API RESTful con Next.js
+- Base de datos PostgreSQL con Prisma ORM
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tecnologías
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+- Frontend: Next.js 16, React 19, Tailwind CSS
+- Backend: Next.js API Routes
+- Base de datos: PostgreSQL
+- ORM: Prisma
+
+## Instalación
+
+1. Clona el repositorio
+2. Instala dependencias: `npm install`
+3. Configura la base de datos PostgreSQL y actualiza `DATABASE_URL` en `.env`
+4. Ejecuta las migraciones: `npx prisma migrate dev`
+5. Genera el cliente Prisma: `npx prisma generate`
+6. Ejecuta el servidor de desarrollo: `npm run dev`
+
+## Uso
+
+- Dashboard: http://localhost:3000
+- Backoffice: http://localhost:3000/admin
+- Nueva Visita: http://localhost:3000/nueva-visita
+
+## Estructura de la Base de Datos
+
+- Clientes
+- Equipos (asociados a clientes)
+- Servicios
+- Vendedores
+- Técnicos
+- Visitas (relaciona cliente, equipo, técnico, vendedor, servicio)
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Cliente {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  telefono  String?
+  direccion String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  equipos  Equipo[]
+  visitas  Visita[]
+}
+
+model Equipo {
+  id         Int      @id @default(autoincrement())
+  nombre     String
+  modelo     String
+  serial     String   @unique
+  clienteId  Int
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  visitas    Visita[]
+}
+
+model Servicio {
+  id          Int      @id @default(autoincrement())
+  descripcion String
+  precio      Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  visitas     Visita[]
+}
+
+model Vendedor {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  telefono  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visitas   Visita[]
+}
+
+model Tecnico {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  especialidad String?
+  email        String   @unique
+  telefono     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  visitas      Visita[]
+}
+
+model Visita {
+  id          Int       @id @default(autoincrement())
+  clienteId   Int
+  cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  equipoId    Int?
+  equipo      Equipo?   @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  tecnicoId   Int
+  tecnico     Tecnico   @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  vendedorId  Int?
+  vendedor    Vendedor? @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  servicioId  Int
+  servicio    Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  fecha       DateTime
+  descripcion String?
+  estado      String    @default("pendiente") // pendiente, en_progreso, completada, cancelada
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
