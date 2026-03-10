@@ -4,31 +4,26 @@ import { prisma } from '../../lib/prisma';
 export async function GET() {
   try {
     const clientes = await prisma.cliente.findMany({
-      select: {
-        id: true,
-        nombre: true,
-        email: true,
-        telefono: true,
-        direccion: true,
-        _count: {
+      include: {
+        equipos: {
           select: {
-            equipos: true,
-            visitas: true,
+            id: true,
+            nombre: true,
+            modelo: true,
+            serial: true,
+          },
+        },
+        visitas: {
+          select: {
+            id: true,
+            fecha: true,
+            descripcion: true,
+            estado: true,
           },
         },
       },
     });
-    return NextResponse.json(
-      clientes.map(c => ({
-        id: c.id,
-        nombre: c.nombre,
-        email: c.email,
-        telefono: c.telefono,
-        direccion: c.direccion,
-        equiposCount: c._count.equipos,
-        visitasCount: c._count.visitas,
-      }))
-    );
+    return NextResponse.json(clientes);
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

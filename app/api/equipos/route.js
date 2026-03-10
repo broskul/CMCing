@@ -4,36 +4,23 @@ import { prisma } from '../../lib/prisma';
 export async function GET() {
   try {
     const equipos = await prisma.equipo.findMany({
-      select: {
-        id: true,
-        nombre: true,
-        modelo: true,
-        serial: true,
-        clienteId: true,
+      include: {
         cliente: {
           select: {
             id: true,
             nombre: true,
           },
         },
-        _count: {
+        visitas: {
           select: {
-            visitas: true,
+            id: true,
+            fecha: true,
+            descripcion: true,
           },
         },
       },
     });
-    return NextResponse.json(
-      equipos.map(e => ({
-        id: e.id,
-        nombre: e.nombre,
-        modelo: e.modelo,
-        serial: e.serial,
-        clienteId: e.clienteId,
-        clienteNombre: e.cliente?.nombre || '-',
-        visitasCount: e._count.visitas,
-      }))
-    );
+    return NextResponse.json(equipos);
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
