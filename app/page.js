@@ -5,29 +5,28 @@ import { useEffect, useState } from 'react';
 export default function Dashboard() {
   const [stats, setStats] = useState({ clientes: 0, equipos: 0, visitas: 0 });
 
-  useEffect(() => {
-    // Fetch stats from API
-    const fetchStats = async () => {
-      try {
-        const [clientesRes, equiposRes, visitasRes] = await Promise.all([
-          fetch('/api/clientes'),
-          fetch('/api/equipos'),
-          fetch('/api/visitas'),
-        ]);
-        const clientes = await clientesRes.json();
-        const equipos = await equiposRes.json();
-        const visitas = await visitasRes.json();
-        setStats({
-          clientes: Array.isArray(clientes) ? clientes.length : 0,
-          equipos: Array.isArray(equipos) ? equipos.length : 0,
-          visitas: Array.isArray(visitas) ? visitas.length : 0,
-        });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      }
-    };
-    fetchStats();
-  }, []);
+useEffect(() => {
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/clientes');
+      const clientes = await res.json();
+
+      const equipos = clientes.flatMap(c => c.equipos || []);
+      const visitas = clientes.flatMap(c => c.visitas || []);
+
+      setStats({
+        clientes: clientes.length,
+        equipos: equipos.length,
+        visitas: visitas.length,
+      });
+
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  fetchStats();
+}, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
