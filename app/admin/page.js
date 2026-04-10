@@ -168,19 +168,22 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 p-8">
+    <div className="min-h-screen p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8">Backoffice CMCing</h1>
+        <div className="panel mb-6 p-6">
+          <p className="text-[0.85rem] uppercase tracking-[0.18em] text-neutral-500">Gestión</p>
+          <h1 className="mt-1 text-[1.65rem] font-semibold text-neutral-900">Backoffice CMCing</h1>
+        </div>
         <div className="mb-6 flex justify-between items-center">
-          <nav className="flex space-x-4">
+          <nav className="flex flex-wrap gap-2">
             {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
+                className={`rounded-xl px-4 py-2 text-[0.9rem] font-medium transition ${
                   activeTab === tab.key
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white bg-opacity-70 backdrop-blur-md text-gray-700 hover:bg-opacity-90'
+                    ? 'bg-neutral-900 text-white'
+                    : 'panel text-neutral-700 hover:bg-neutral-100'
                 }`}
               >
                 {tab.label}
@@ -189,38 +192,38 @@ export default function Admin() {
           </nav>
           <button
             onClick={openCreateModal}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition"
+            className="rounded-xl bg-emerald-700 px-4 py-2 text-[0.9rem] font-medium text-white transition hover:bg-emerald-600"
           >
             + Nuevo
           </button>
         </div>
-        <div className="bg-white bg-opacity-70 backdrop-blur-md rounded-lg p-6 shadow-lg">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-4">{tabs.find(t => t.key === activeTab).label}</h2>
+        <div className="panel p-6">
+          <h2 className="mb-4 text-[1.15rem] font-semibold text-neutral-900">{tabs.find(t => t.key === activeTab).label}</h2>
           {loading ? (
             <p>Cargando...</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr className="bg-gray-100">
+                  <tr className="bg-neutral-100/80">
                     {data.length > 0 && Object.keys(data[0]).filter(key => !key.includes('At') && key !== 'id').map(key => (
-                      <th key={key} className="px-4 py-2 text-left text-sm font-semibold">{key}</th>
+                      <th key={key} className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">{key}</th>
                     ))}
-                    <th className="px-4 py-2 text-left text-sm font-semibold">Acciones</th>
+                    <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.map(item => (
-                    <tr key={item.id} className="border-t hover:bg-gray-50">
+                    <tr key={item.id} className="border-t border-neutral-200 hover:bg-neutral-50">
                       {Object.keys(item).filter(key => !key.includes('At') && key !== 'id').map(key => {
                         const value = item[key];
                         const isArray = Array.isArray(value);
                         return (
-                          <td key={key} className="px-4 py-3 text-sm">
+                          <td key={key} className="px-4 py-3 text-[0.9rem] text-neutral-700">
                             {isArray ? (
                               <button
                                 onClick={() => handleViewRelated(key, value, key)}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition"
+                                className="rounded-lg bg-sky-700 px-2 py-1 text-[0.76rem] font-medium text-white transition hover:bg-sky-600"
                               >
                                 Ver ({value.length})
                               </button>
@@ -235,13 +238,13 @@ export default function Admin() {
                       <td className="px-4 py-3 text-sm space-x-2">
                         <button
                           onClick={() => openEditModal(item)}
-                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition"
+                          className="rounded-lg bg-neutral-900 px-3 py-1 text-[0.76rem] font-medium text-white transition hover:bg-neutral-700"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs transition"
+                          className="rounded-lg bg-rose-700 px-3 py-1 text-[0.76rem] font-medium text-white transition hover:bg-rose-600"
                         >
                           Eliminar
                         </button>
@@ -256,9 +259,9 @@ export default function Admin() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md max-h-96 overflow-y-auto">
-            <h3 className="text-2xl font-bold mb-4">{isEditing ? 'Editar' : 'Crear'} {tabs.find(t => t.key === activeTab).label}</h3>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md max-h-96 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-8 shadow-2xl">
+            <h3 className="mb-4 text-[1.25rem] font-semibold text-neutral-900">{isEditing ? 'Editar' : 'Crear'} {tabs.find(t => t.key === activeTab).label}</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               {fieldConfigs[activeTab].map(field => {
                 const fieldType = getFieldType(field);
@@ -267,13 +270,13 @@ export default function Admin() {
                 if (fieldType === 'select' && selectOptions.length > 0) {
                   return (
                     <div key={field}>
-                      <label className="block text-sm font-medium mb-1">{field}</label>
+                      <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{field}</label>
                       <select
                         name={field}
                         value={formData[field] || ''}
                         onChange={handleInputChange}
                         required
-                        className="w-full border border-gray-300 rounded px-3 py-2"
+                        className="input-base"
                       >
                         <option value="">Seleccionar...</option>
                         {selectOptions.map(opt => (
@@ -286,7 +289,7 @@ export default function Admin() {
 
                 return (
                   <div key={field}>
-                    <label className="block text-sm font-medium mb-1">{field}</label>
+                    <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{field}</label>
                     <input
                       type={fieldType}
                       name={field}
@@ -294,7 +297,7 @@ export default function Admin() {
                       onChange={handleInputChange}
                       required={fieldType !== 'tel' && fieldType !== 'select'}
                       step={fieldType === 'number' ? '0.01' : undefined}
-                      className="w-full border border-gray-300 rounded px-3 py-2"
+                      className="input-base"
                     />
                   </div>
                 );
@@ -302,14 +305,14 @@ export default function Admin() {
               <div className="flex gap-2 mt-6">
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition"
+                  className="flex-1 rounded-xl bg-neutral-900 px-4 py-2 text-[0.9rem] font-medium text-white transition hover:bg-neutral-700"
                 >
                   Guardar
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded transition"
+                  className="flex-1 rounded-xl bg-neutral-200 px-4 py-2 text-[0.9rem] font-medium text-neutral-800 transition hover:bg-neutral-300"
                 >
                   Cancelar
                 </button>

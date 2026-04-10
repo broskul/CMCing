@@ -1,14 +1,10 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Montserrat } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata = {
@@ -19,20 +15,20 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <nav className="bg-white bg-opacity-80 backdrop-blur-md shadow-md">
+      <body className={`${montserrat.variable} app-shell antialiased`}>
+        <nav className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
               <div className="flex">
-                <div className="flex-shrink-0 flex items-center">
-                  <a href="/" className="text-xl font-bold text-gray-800">CMCiing</a>
+                <div className="shrink-0 flex items-center">
+                  <a href="/" className="text-lg font-semibold text-neutral-900">CMCiing Demo</a>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <a href="/" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
-                  <a href="/admin" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Backoffice</a>
-                  <a href="/nueva-visita" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Nueva Visita</a>
+                  <a href="/" className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-[0.95rem] font-medium text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">Dashboard</a>
+                  <a href="/admin" className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-[0.95rem] font-medium text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">Backoffice</a>
+                  <a href="/nueva-visita" className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-[0.95rem] font-medium text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">Nueva Visita</a>
+                  <a href="/informes/visitas" className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-[0.95rem] font-medium text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">Informe Visitas</a>
+                  <a href="/informes/facturacion" className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-[0.95rem] font-medium text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">Informe Facturación</a>
                 </div>
               </div>
             </div>
