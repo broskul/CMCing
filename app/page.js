@@ -7,13 +7,13 @@ const demoProducts = [
   {
     id: 1,
     nombre: 'Termociclador EQ-BM 68',
-    imagen: '/productos/termociclador-eq-bm-68.png',
+    imagen: '/productos/termociclador-eq-bm-68-ref.png',
     descripcion: 'Equipo demo con imagen derivada del informe técnico entregado por CMCing.',
   },
   {
     id: 2,
     nombre: 'Gabinete A2 EQ-MO-86',
-    imagen: '/productos/gabinete-a2-eq-mo-86.png',
+    imagen: '/productos/gabinete-a2-eq-mo-86-ref.jpg',
     descripcion: 'Equipo demo con imagen derivada del informe técnico entregado por CMCing.',
   },
 ];

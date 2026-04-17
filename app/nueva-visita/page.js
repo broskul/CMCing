@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 export default function NuevaVisita() {
   const [form, setForm] = useState({
     clienteId: '',
-    equipoId: '',
+    equipoIds: [],
     tecnicoId: '',
     vendedorId: '',
     servicioId: '',
@@ -54,7 +54,8 @@ export default function NuevaVisita() {
         body: JSON.stringify({
           ...form,
           clienteId: parseInt(form.clienteId),
-          equipoId: form.equipoId ? parseInt(form.equipoId) : null,
+          equipoIds: form.equipoIds.map((id) => parseInt(id)),
+          equipoId: form.equipoIds.length ? parseInt(form.equipoIds[0]) : null,
           tecnicoId: parseInt(form.tecnicoId),
           vendedorId: form.vendedorId ? parseInt(form.vendedorId) : null,
           servicioId: parseInt(form.servicioId),
@@ -65,7 +66,7 @@ export default function NuevaVisita() {
         alert('Visita creada exitosamente');
         setForm({
           clienteId: '',
-          equipoId: '',
+          equipoIds: [],
           tecnicoId: '',
           vendedorId: '',
           servicioId: '',
@@ -82,8 +83,32 @@ export default function NuevaVisita() {
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === 'clienteId') {
+      setForm({ ...form, clienteId: value, equipoIds: [] });
+      return;
+    }
+
+    setForm({ ...form, [name]: value });
   };
+
+  const handleEquipoToggle = (equipoId) => {
+    const equipoIdString = String(equipoId);
+    setForm((prev) => {
+      const exists = prev.equipoIds.includes(equipoIdString);
+      return {
+        ...prev,
+        equipoIds: exists
+          ? prev.equipoIds.filter((id) => id !== equipoIdString)
+          : [...prev.equipoIds, equipoIdString],
+      };
+    });
+  };
+
+  const equiposDisponibles = form.clienteId
+    ? options.equipos.filter((equipo) => String(equipo.clienteId) === String(form.clienteId))
+    : options.equipos;
 
   return (
     <div className="min-h-screen p-6 md:p-8">
@@ -101,11 +126,23 @@ export default function NuevaVisita() {
             </select>
           </div>
           <div>
-            <label className="block text-[0.85rem] font-medium text-neutral-700">Equipo (opcional)</label>
-            <select name="equipoId" value={form.equipoId} onChange={handleChange} className="input-base mt-1 block">
-              <option value="">Seleccionar Equipo</option>
-              {options.equipos.map(e => <option key={e.id} value={e.id}>{e.nombre} - {e.serial}</option>)}
-            </select>
+            <label className="block text-[0.85rem] font-medium text-neutral-700">Equipos (opcionales, puedes elegir varios)</label>
+            <div className="mt-2 space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+              {equiposDisponibles.length > 0 ? (
+                equiposDisponibles.map((equipo) => (
+                  <label key={equipo.id} className="flex items-center gap-2 text-[0.9rem] text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={form.equipoIds.includes(String(equipo.id))}
+                      onChange={() => handleEquipoToggle(equipo.id)}
+                    />
+                    <span>{equipo.nombre} - {equipo.serial}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-[0.85rem] text-neutral-500">No hay equipos para el cliente seleccionado.</p>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-[0.85rem] font-medium text-neutral-700">Técnico</label>

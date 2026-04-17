@@ -46,7 +46,7 @@ function buildInitialData() {
       modelo: 'EQ-BM 68',
       serial: 'TC-BM68-2026-019',
       clienteId: 1,
-      imagenUrl: '/productos/termociclador-eq-bm-68.png',
+      imagenUrl: '/productos/termociclador-eq-bm-68-ref.png',
       createdAt,
       updatedAt: createdAt,
     },
@@ -56,7 +56,7 @@ function buildInitialData() {
       modelo: 'EQ-MO-86',
       serial: 'GB-A2-2026-114',
       clienteId: 2,
-      imagenUrl: '/productos/gabinete-a2-eq-mo-86.png',
+      imagenUrl: '/productos/gabinete-a2-eq-mo-86-ref.jpg',
       createdAt,
       updatedAt: createdAt,
     },
@@ -66,7 +66,7 @@ function buildInitialData() {
       modelo: 'EQ-BM 68',
       serial: 'TC-BM68-2026-031',
       clienteId: 3,
-      imagenUrl: '/productos/termociclador-eq-bm-68.png',
+      imagenUrl: '/productos/termociclador-eq-bm-68-ref.png',
       createdAt,
       updatedAt: createdAt,
     },
@@ -94,6 +94,7 @@ function buildInitialData() {
       id: 1,
       clienteId: 1,
       equipoId: 1,
+      equipoIds: [1],
       tecnicoId: 1,
       vendedorId: 1,
       servicioId: 1,
@@ -107,6 +108,7 @@ function buildInitialData() {
       id: 2,
       clienteId: 2,
       equipoId: 2,
+      equipoIds: [2],
       tecnicoId: 2,
       vendedorId: 2,
       servicioId: 2,
@@ -120,6 +122,7 @@ function buildInitialData() {
       id: 3,
       clienteId: 3,
       equipoId: 3,
+      equipoIds: [3],
       tecnicoId: 1,
       vendedorId: 1,
       servicioId: 3,
@@ -170,6 +173,22 @@ function findById(entity, id) {
   return collectionOf(entity).find((item) => item.id === Number(id)) || null;
 }
 
+function getVisitaEquipoIds(visita) {
+  if (Array.isArray(visita.equipoIds) && visita.equipoIds.length > 0) {
+    return visita.equipoIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
+  }
+
+  if (visita.equipoId) {
+    return [Number(visita.equipoId)];
+  }
+
+  return [];
+}
+
+function visitaHasEquipo(visita, equipoId) {
+  return getVisitaEquipoIds(visita).includes(Number(equipoId));
+}
+
 function ensureEstado(estado) {
   if (!estado) return 'pendiente';
   if (!ESTADOS.includes(estado)) {
@@ -189,6 +208,16 @@ function normalizePayload(entity, payload, { creating }) {
     }
   });
 
+  if ('equipoIds' in normalized) {
+    if (Array.isArray(normalized.equipoIds)) {
+      normalized.equipoIds = normalized.equipoIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id));
+    } else {
+      normalized.equipoIds = [];
+    }
+  }
+
   if ('precio' in normalized && normalized.precio !== null && normalized.precio !== '') {
     normalized.precio = Number(normalized.precio);
   }
@@ -198,7 +227,23 @@ function normalizePayload(entity, payload, { creating }) {
   }
 
   if (entity === 'visitas') {
-    normalized.estado = ensureEstado(normalized.estado);
+    if (creating || 'estado' in payload) {
+      normalized.estado = ensureEstado(normalized.estado);
+    }
+
+    const includesEquipoIds = 'equipoIds' in payload;
+    const includesEquipoId = 'equipoId' in payload;
+
+    if (creating || includesEquipoIds || includesEquipoId) {
+      const visitEquipoIds = Array.isArray(normalized.equipoIds) && normalized.equipoIds.length > 0
+        ? normalized.equipoIds
+        : normalized.equipoId
+          ? [Number(normalized.equipoId)]
+          : [];
+
+      normalized.equipoIds = [...new Set(visitEquipoIds)];
+      normalized.equipoId = normalized.equipoIds[0] || null;
+    }
   }
 
   if (creating) {
@@ -237,15 +282,29 @@ function deleteEntity(entity, id) {
 
 function formatVisitaRelations(visita) {
   const cliente = findById('clientes', visita.clienteId);
-  const equipo = visita.equipoId ? findById('equipos', visita.equipoId) : null;
+  const equipoIds = getVisitaEquipoIds(visita);
+  const equipos = equipoIds
+    .map((equipoId) => findById('equipos', equipoId))
+    .filter(Boolean)
+    .map((equipo) => ({
+      id: equipo.id,
+      nombre: equipo.nombre,
+      serial: equipo.serial,
+      modelo: equipo.modelo,
+      imagenUrl: equipo.imagenUrl,
+    }));
+  const equipo = equipos[0] || null;
   const tecnico = findById('tecnicos', visita.tecnicoId);
   const vendedor = visita.vendedorId ? findById('vendedores', visita.vendedorId) : null;
   const servicio = findById('servicios', visita.servicioId);
 
   return {
     ...visita,
+    equipoIds: equipos.map((item) => item.id),
+    equipoId: equipo?.id || null,
     cliente: cliente ? { id: cliente.id, nombre: cliente.nombre } : null,
-    equipo: equipo ? { id: equipo.id, nombre: equipo.nombre, serial: equipo.serial, modelo: equipo.modelo, imagenUrl: equipo.imagenUrl } : null,
+    equipo,
+    equipos,
     tecnico: tecnico ? { id: tecnico.id, nombre: tecnico.nombre } : null,
     vendedor: vendedor ? { id: vendedor.id, nombre: vendedor.nombre } : null,
     servicio: servicio ? { id: servicio.id, descripcion: servicio.descripcion, precio: servicio.precio || 0 } : null,
@@ -278,7 +337,7 @@ function listEquipos() {
       return cliente ? { id: cliente.id, nombre: cliente.nombre } : null;
     })(),
     visitas: store.visitas
-      .filter((visita) => visita.equipoId === equipo.id)
+      .filter((visita) => visitaHasEquipo(visita, equipo.id))
       .map((visita) => ({ id: visita.id, fecha: visita.fecha, descripcion: visita.descripcion, estado: visita.estado })),
   }));
 }
@@ -383,15 +442,15 @@ function getInformeVisitas(filters = {}) {
     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
   const productos = visitas
-    .filter((visita) => visita.equipo?.id)
+    .flatMap((visita) => visita.equipos || (visita.equipo ? [visita.equipo] : []))
     .reduce((acc, visita) => {
-      if (!acc.some((producto) => producto.id === visita.equipo.id)) {
+      if (!acc.some((producto) => producto.id === visita.id)) {
         acc.push({
-          id: visita.equipo.id,
-          nombre: visita.equipo.nombre,
-          modelo: visita.equipo.modelo,
-          serial: visita.equipo.serial,
-          imagenUrl: visita.equipo.imagenUrl,
+          id: visita.id,
+          nombre: visita.nombre,
+          modelo: visita.modelo,
+          serial: visita.serial,
+          imagenUrl: visita.imagenUrl,
         });
       }
       return acc;
@@ -437,15 +496,15 @@ function getInformeFacturacion(filters = {}) {
   });
 
   const productos = visitasFiltradas
-    .filter((visita) => visita.equipo?.id)
+    .flatMap((visita) => visita.equipos || (visita.equipo ? [visita.equipo] : []))
     .reduce((acc, visita) => {
-      if (!acc.some((producto) => producto.id === visita.equipo.id)) {
+      if (!acc.some((producto) => producto.id === visita.id)) {
         acc.push({
-          id: visita.equipo.id,
-          nombre: visita.equipo.nombre,
-          modelo: visita.equipo.modelo,
-          serial: visita.equipo.serial,
-          imagenUrl: visita.equipo.imagenUrl,
+          id: visita.id,
+          nombre: visita.nombre,
+          modelo: visita.modelo,
+          serial: visita.serial,
+          imagenUrl: visita.imagenUrl,
         });
       }
       return acc;

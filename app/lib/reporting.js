@@ -7,6 +7,16 @@ const LOGO_PATH = '/brand/logo-cmcing.png';
 const money = (value) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value || 0);
 const formatDate = (value) => new Date(value).toLocaleString('es-CL');
 
+function getVisitaEquipos(visita) {
+  if (Array.isArray(visita.equipos) && visita.equipos.length > 0) {
+    return visita.equipos;
+  }
+  if (visita.equipo) {
+    return [visita.equipo];
+  }
+  return [];
+}
+
 function getPublicAbsolutePath(publicPath) {
   const clean = publicPath.startsWith('/') ? publicPath.slice(1) : publicPath;
   return path.join(process.cwd(), 'public', clean);
@@ -123,15 +133,19 @@ async function createVisitasPdf(data) {
       color: rgb(0.1, 0.16, 0.25),
     });
 
+    const equipos = getVisitaEquipos(visita);
+    const equiposLabel = equipos.length > 0
+      ? equipos.map((equipo) => `${equipo.nombre}${equipo.modelo ? ` (${equipo.modelo})` : ''}`).join(', ')
+      : '-';
     const line1 = `Cliente: ${visita.cliente?.nombre || '-'} | Técnico: ${visita.tecnico?.nombre || '-'} | Servicio: ${visita.servicio?.descripcion || '-'}`;
-    const line2 = `Equipo: ${visita.equipo?.nombre || '-'} ${visita.equipo?.modelo ? `(${visita.equipo.modelo})` : ''}`;
+    const line2 = `Equipos: ${equiposLabel}`;
     const line3 = `Detalle: ${visita.descripcion || 'Sin observaciones'}`;
 
     page.drawText(line1.slice(0, 90), { x: 40, y: y - 40, size: 9, font: fonts.fontRegular, color: rgb(0.2, 0.2, 0.22) });
     page.drawText(line2.slice(0, 90), { x: 40, y: y - 56, size: 9, font: fonts.fontRegular, color: rgb(0.2, 0.2, 0.22) });
     page.drawText(line3.slice(0, 90), { x: 40, y: y - 72, size: 9, font: fonts.fontRegular, color: rgb(0.2, 0.2, 0.22) });
 
-    const productImage = await embedImage(pdfDoc, visita.equipo?.imagenUrl, imageCache);
+    const productImage = await embedImage(pdfDoc, equipos[0]?.imagenUrl, imageCache);
     if (productImage) {
       page.drawRectangle({ x: 430, y: y - 90, width: 125, height: 72, borderWidth: 1, borderColor: rgb(0.9, 0.9, 0.94) });
       drawFittedImage(page, productImage, 433, y - 87, 119, 66);

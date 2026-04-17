@@ -18,8 +18,8 @@ Permitir demostracion comercial funcional completa (CRUD de maestros, visitas, i
   - `app/layout.js`
 - Assets demo:
   - `public/brand/logo-cmcing.png`
-  - `public/productos/termociclador-eq-bm-68.png`
-  - `public/productos/gabinete-a2-eq-mo-86.png`
+  - `public/productos/termociclador-eq-bm-68-ref.png`
+  - `public/productos/gabinete-a2-eq-mo-86-ref.jpg`
 
 ## Flujo funcional real
 
@@ -46,6 +46,7 @@ Permitir demostracion comercial funcional completa (CRUD de maestros, visitas, i
 - Se removio acceso runtime a Prisma para operaciones de app.
 - Se conserva semilla demo en memoria con relaciones cliente/equipo/visita/servicio.
 - Se incluyo campo `imagenUrl` en equipos para informes y correos.
+- Nueva Visita soporta seleccion multiple de equipos por visita usando `equipoIds` (manteniendo `equipoId` como compatibilidad para pantallas existentes).
 
 ## Riesgos y bugs conocidos
 

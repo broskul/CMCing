@@ -10,6 +10,12 @@ import {
 } from '../../../lib/reporting';
 
 const formatDate = (value) => new Date(value).toLocaleString('es-CL');
+const getEquiposLabel = (visita) => {
+  if (Array.isArray(visita.equipos) && visita.equipos.length > 0) {
+    return visita.equipos.map((equipo) => equipo.nombre).join(', ');
+  }
+  return visita.equipo?.nombre || '-';
+};
 
 export async function POST(request) {
   try {
@@ -36,7 +42,7 @@ export async function POST(request) {
             `<tr>
               <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${formatDate(visita.fecha)}</td>
               <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${visita.cliente?.nombre || '-'}</td>
-              <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${visita.equipo?.nombre || '-'}</td>
+              <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${getEquiposLabel(visita)}</td>
               <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${visita.estado || '-'}</td>
             </tr>`
         )

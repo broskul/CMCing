@@ -13,6 +13,7 @@ Permitir generar y presentar informes operativos de visitas y facturacion, con e
 
 - Fuente de datos principal: `app/lib/demo-store.js`.
 - Generacion PDF: `pdf-lib` via `app/lib/reporting.js`.
+- Generacion PDF cliente para informe de visitas: `html2pdf.js` en `app/informes/visitas/page.js`.
 - Correo: API interna `app/api/informes/email/route.js` (usa MS Graph).
 - Assets visuales: logo y productos en `public/brand/` y `public/productos/`.
 
@@ -28,9 +29,12 @@ Permitir generar y presentar informes operativos de visitas y facturacion, con e
 
 3. Exportaciones:
 - CSV se genera en cliente.
+- Informe completo de visitas se genera en cliente con `html2pdf` (no usa `window.print`).
+- Informe tecnico individual por visita se genera en cliente con `html2pdf`.
 - PDF se genera en servidor:
   - `GET /api/informes/visitas/pdf`
   - `GET /api/informes/facturacion/pdf`
+- Para visitas con multiples equipos, el informe consolida y muestra el listado de equipos (no solo uno).
 
 4. Envio email:
 - UI llama `POST /api/informes/email`.
@@ -51,14 +55,15 @@ Permitir generar y presentar informes operativos de visitas y facturacion, con e
 
 ## Decisiones tecnicas vigentes
 
-- Se usa `pdf-lib` para evitar dependencias pesadas y generar PDF server-side.
+- Se mantiene `pdf-lib` para PDF server-side (API y adjuntos de correo).
+- Se incorpora `html2pdf.js` para el informe completo de visitas y el informe tecnico por visita desde la UI.
 - Se incluye logo CMCing y fotos de productos en PDF y correo.
 - El logo se renderiza con `object-fit: contain` para que se vea completo.
 - En mail, imagenes inline se envian como `cid` attachments.
 
 ## Riesgos y bugs conocidos
 
-- El layout del PDF prioriza estabilidad y legibilidad, no diseño editorial avanzado.
+- El informe tecnico HTML aproxima el formato de referencia, pero no replica al 100% cada detalle del PDF historico.
 - Textos largos en tarjetas PDF se recortan para evitar desbordes.
 - No hay versionado ni historial de informes enviados.
 

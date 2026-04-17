@@ -20,6 +20,65 @@ const tabs = [
   { key: 'visitas', label: 'Visitas', api: '/api/visitas' },
 ];
 
+const relationKeysById = {
+  clienteId: 'cliente',
+  equipoId: 'equipo',
+  tecnicoId: 'tecnico',
+  vendedorId: 'vendedor',
+  servicioId: 'servicio',
+};
+
+const fieldLabels = {
+  nombre: 'Nombre',
+  email: 'Email',
+  telefono: 'Teléfono',
+  direccion: 'Dirección',
+  modelo: 'Modelo',
+  serial: 'Serial',
+  imagenUrl: 'Imagen',
+  cliente: 'Cliente',
+  clienteId: 'Cliente',
+  equipo: 'Equipo',
+  equipoId: 'Equipo',
+  tecnico: 'Técnico',
+  tecnicoId: 'Técnico',
+  vendedor: 'Vendedor',
+  vendedorId: 'Vendedor',
+  servicio: 'Servicio',
+  servicioId: 'Servicio',
+  fecha: 'Fecha',
+  descripcion: 'Descripción',
+  estado: 'Estado',
+  especialidad: 'Especialidad',
+  precio: 'Precio',
+  visitas: 'Visitas',
+  equipos: 'Equipos',
+};
+
+const estadoLabels = {
+  pendiente: 'Pendiente',
+  en_progreso: 'En progreso',
+  completada: 'Completada',
+  cancelada: 'Cancelada',
+};
+
+const estadoClasses = {
+  pendiente: 'bg-amber-100 text-amber-800',
+  en_progreso: 'bg-sky-100 text-sky-800',
+  completada: 'bg-emerald-100 text-emerald-800',
+  cancelada: 'bg-rose-100 text-rose-800',
+};
+
+const formatFriendlyDate = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('es-CL', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+};
+
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('clientes');
   const [data, setData] = useState([]);
@@ -93,10 +152,19 @@ export default function Admin() {
     const currentTab = tabs.find(t => t.key === activeTab);
     
     try {
-      const payload = { ...formData };
+      const payload = fieldConfigs[activeTab].reduce((acc, field) => {
+        acc[field] = formData[field] ?? '';
+        return acc;
+      }, {});
+
       // Convertir IDs a números
       ['clienteId', 'equipoId', 'tecnicoId', 'vendedorId', 'servicioId'].forEach(key => {
-        if (payload[key]) payload[key] = parseInt(payload[key]);
+        if (!(key in payload)) return;
+        if (payload[key] === '' || payload[key] === null) {
+          payload[key] = null;
+          return;
+        }
+        payload[key] = parseInt(payload[key]);
       });
       if (payload.precio) payload.precio = parseFloat(payload.precio);
       if (payload.fecha) payload.fecha = new Date(payload.fecha).toISOString();
@@ -167,6 +235,47 @@ export default function Admin() {
     return [];
   };
 
+  const getTableColumns = (sampleItem) => {
+    if (!sampleItem) return [];
+
+    if (activeTab === 'visitas') {
+      return ['cliente', 'equipos', 'tecnico', 'vendedor', 'servicio', 'fecha', 'descripcion', 'estado'];
+    }
+
+    return Object.keys(sampleItem)
+      .filter(key => !key.includes('At') && key !== 'id')
+      .filter((key) => !(key.endsWith('Id') && sampleItem[relationKeysById[key]]));
+  };
+
+  const getColumnLabel = (key) => fieldLabels[key] || key;
+
+  const getDisplayValue = (item, key) => {
+    const value = item[key];
+
+    if (key === 'fecha') return formatFriendlyDate(value);
+    if (key === 'estado') return estadoLabels[value] || value || '-';
+
+    if (key === 'cliente' || key === 'equipo' || key === 'tecnico' || key === 'vendedor') {
+      return item[key]?.nombre || '-';
+    }
+
+    if (key === 'equipos') {
+      if (!Array.isArray(item.equipos) || item.equipos.length === 0) return '-';
+      return item.equipos.map((equipo) => equipo.nombre).join(', ');
+    }
+
+    if (key === 'servicio') {
+      return item[key]?.descripcion || '-';
+    }
+
+    if (value && typeof value === 'object') {
+      return value.nombre || value.descripcion || value.modelo || value.serial || '-';
+    }
+
+    if (value === null || typeof value === 'undefined' || value === '') return '-';
+    return String(value);
+  };
+
   return (
     <div className="min-h-screen p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -203,11 +312,14 @@ export default function Admin() {
             <p>Cargando...</p>
           ) : (
             <div className="overflow-x-auto">
+              {(() => {
+                const tableColumns = data.length > 0 ? getTableColumns(data[0]) : [];
+                return (
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-neutral-100/80">
-                    {data.length > 0 && Object.keys(data[0]).filter(key => !key.includes('At') && key !== 'id').map(key => (
-                      <th key={key} className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">{key}</th>
+                    {tableColumns.map(key => (
+                      <th key={key} className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">{getColumnLabel(key)}</th>
                     ))}
                     <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">Acciones</th>
                   </tr>
@@ -215,22 +327,26 @@ export default function Admin() {
                 <tbody>
                   {data.map(item => (
                     <tr key={item.id} className="border-t border-neutral-200 hover:bg-neutral-50">
-                      {Object.keys(item).filter(key => !key.includes('At') && key !== 'id').map(key => {
+                      {tableColumns.map(key => {
                         const value = item[key];
                         const isArray = Array.isArray(value);
                         return (
                           <td key={key} className="px-4 py-3 text-[0.9rem] text-neutral-700">
-                            {isArray ? (
+                            {isArray && key !== 'equipos' ? (
                               <button
                                 onClick={() => handleViewRelated(key, value, key)}
                                 className="rounded-lg bg-sky-700 px-2 py-1 text-[0.76rem] font-medium text-white transition hover:bg-sky-600"
                               >
                                 Ver ({value.length})
                               </button>
-                            ) : typeof value === 'object' && value !== null ? (
-                              <span className="text-gray-500">-</span>
+                            ) : key === 'estado' ? (
+                              <span className={`inline-flex rounded-full px-2 py-1 text-[0.76rem] font-medium ${estadoClasses[item.estado] || 'bg-neutral-100 text-neutral-700'}`}>
+                                {getDisplayValue(item, key)}
+                              </span>
                             ) : (
-                              String(value).slice(0, 50)
+                              <span className={key === 'descripcion' ? 'inline-block max-w-[22rem]' : ''}>
+                                {getDisplayValue(item, key).slice(0, 120)}
+                              </span>
                             )}
                           </td>
                         );
@@ -253,6 +369,8 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+                );
+              })()}
             </div>
           )}
         </div>
