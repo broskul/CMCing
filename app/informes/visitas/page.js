@@ -382,48 +382,89 @@ const buildSingleTechnicalReportHtml = (visita) => `
 `;
 
 const generatePdfFromHtml = async ({ html, filename }) => {
-  const html2pdf = (await import('html2pdf.js')).default;
+  const html2pdfModule = await import('html2pdf.js');
+  const html2pdf = html2pdfModule.default || html2pdfModule;
 
-  const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-10000px';
-  container.style.top = '0';
-  container.style.width = '794px';
-  container.style.background = '#ffffff';
-  container.innerHTML = html;
-  document.body.appendChild(container);
+  if (typeof html2pdf !== 'function') {
+    throw new Error('No se pudo inicializar html2pdf.');
+  }
+
+  const overlay = document.createElement('div');
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.zIndex = '99999';
+  overlay.style.background = 'rgba(15, 23, 42, 0.38)';
+  overlay.style.backdropFilter = 'blur(1px)';
+  overlay.style.padding = '16px';
+  overlay.style.overflow = 'auto';
+
+  const shell = document.createElement('div');
+  shell.style.width = '210mm';
+  shell.style.margin = '0 auto';
+  shell.style.background = '#ffffff';
+  shell.style.boxShadow = '0 20px 60px rgba(15, 23, 42, 0.22)';
+  shell.style.borderRadius = '10px';
+  shell.style.padding = '8mm';
+  shell.innerHTML = html;
+
+  const badge = document.createElement('div');
+  badge.textContent = 'Generando PDF...';
+  badge.style.position = 'sticky';
+  badge.style.top = '6px';
+  badge.style.width = 'fit-content';
+  badge.style.margin = '0 auto 10px';
+  badge.style.padding = '8px 12px';
+  badge.style.borderRadius = '9999px';
+  badge.style.background = '#111827';
+  badge.style.color = '#ffffff';
+  badge.style.font = '600 12px Arial, sans-serif';
+  badge.style.letterSpacing = '0.02em';
+
+  overlay.appendChild(badge);
+  overlay.appendChild(shell);
+  document.body.appendChild(overlay);
 
   try {
-    const images = Array.from(container.querySelectorAll('img'));
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    const images = Array.from(shell.querySelectorAll('img'));
     await Promise.all(
       images.map((img) => {
-        if (img.complete) return Promise.resolve();
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
         return new Promise((resolve) => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
+          const done = () => resolve();
+          img.addEventListener('load', done, { once: true });
+          img.addEventListener('error', done, { once: true });
         });
       })
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     await html2pdf().set({
       margin: [5, 5, 5, 5],
       filename,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
-        scale: 2,
+        scale: 2.2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: container.scrollWidth,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: shell.scrollWidth,
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
-    }).from(container).save();
+    }).from(shell).save();
+  } catch (error) {
+    console.error('Error generando PDF html2pdf:', error);
+    throw error;
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(overlay);
   }
 };
 
