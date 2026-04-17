@@ -1,18 +1,9 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '../../../lib/prisma';
+import { deleteEntity, getVisita, updateEntity } from '../../../lib/demo-store';
 
 export async function GET(request, { params }) {
   try {
-    const visita = await prisma.visita.findUnique({
-      where: { id: parseInt(params.id) },
-      include: {
-        cliente: true,
-        equipo: true,
-        tecnico: true,
-        vendedor: true,
-        servicio: true,
-      },
-    });
+    const visita = getVisita(params.id);
     if (!visita) {
       return NextResponse.json({ error: 'Visita not found' }, { status: 404 });
     }
@@ -25,10 +16,10 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const body = await request.json();
-    const visita = await prisma.visita.update({
-      where: { id: parseInt(params.id) },
-      data: body,
-    });
+    const visita = updateEntity('visitas', params.id, body);
+    if (!visita) {
+      return NextResponse.json({ error: 'Visita not found' }, { status: 404 });
+    }
     return NextResponse.json(visita);
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -37,9 +28,10 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    await prisma.visita.delete({
-      where: { id: parseInt(params.id) },
-    });
+    const deleted = deleteEntity('visitas', params.id);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Visita not found' }, { status: 404 });
+    }
     return NextResponse.json({ message: 'Visita deleted' });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '../../lib/prisma';
+import { createEntity, listServicios } from '../../lib/demo-store';
 
 export async function GET() {
   try {
-    const servicios = await prisma.servicio.findMany({
-      include: {
-        visitas: true,
-      },
-    });
-    return NextResponse.json(servicios);
+    return NextResponse.json(listServicios());
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -17,9 +12,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const servicio = await prisma.servicio.create({
-      data: body,
-    });
+    const servicio = createEntity('servicios', body);
     return NextResponse.json(servicio, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

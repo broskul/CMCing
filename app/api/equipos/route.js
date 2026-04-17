@@ -1,26 +1,9 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '../../lib/prisma';
+import { createEntity, listEquipos } from '../../lib/demo-store';
 
 export async function GET() {
   try {
-    const equipos = await prisma.equipo.findMany({
-      include: {
-        cliente: {
-          select: {
-            id: true,
-            nombre: true,
-          },
-        },
-        visitas: {
-          select: {
-            id: true,
-            fecha: true,
-            descripcion: true,
-          },
-        },
-      },
-    });
-    return NextResponse.json(equipos);
+    return NextResponse.json(listEquipos());
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -29,9 +12,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const equipo = await prisma.equipo.create({
-      data: body,
-    });
+    const equipo = createEntity('equipos', body);
     return NextResponse.json(equipo, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

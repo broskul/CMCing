@@ -1,15 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const fieldConfigs = {
   clientes: ['nombre', 'email', 'telefono', 'direccion'],
-  equipos: ['nombre', 'modelo', 'serial', 'clienteId'],
+  equipos: ['nombre', 'modelo', 'serial', 'clienteId', 'imagenUrl'],
   servicios: ['descripcion', 'precio'],
   vendedores: ['nombre', 'email', 'telefono'],
   tecnicos: ['nombre', 'especialidad', 'email', 'telefono'],
   visitas: ['clienteId', 'equipoId', 'tecnicoId', 'vendedorId', 'servicioId', 'fecha', 'descripcion', 'estado'],
 };
+
+const tabs = [
+  { key: 'clientes', label: 'Clientes', api: '/api/clientes' },
+  { key: 'equipos', label: 'Equipos', api: '/api/equipos' },
+  { key: 'servicios', label: 'Servicios', api: '/api/servicios' },
+  { key: 'vendedores', label: 'Vendedores', api: '/api/vendedores' },
+  { key: 'tecnicos', label: 'Técnicos', api: '/api/tecnicos' },
+  { key: 'visitas', label: 'Visitas', api: '/api/visitas' },
+];
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('clientes');
@@ -22,22 +31,7 @@ export default function Admin() {
   const [viewModal, setViewModal] = useState(false);
   const [viewData, setViewData] = useState({ title: '', items: [] });
 
-  const tabs = [
-    { key: 'clientes', label: 'Clientes', api: '/api/clientes' },
-    { key: 'equipos', label: 'Equipos', api: '/api/equipos' },
-    { key: 'servicios', label: 'Servicios', api: '/api/servicios' },
-    { key: 'vendedores', label: 'Vendedores', api: '/api/vendedores' },
-    { key: 'tecnicos', label: 'Técnicos', api: '/api/tecnicos' },
-    { key: 'visitas', label: 'Visitas', api: '/api/visitas' },
-  ];
-
-  useEffect(() => {
-    fetchData();
-    fetchOptions();
-  }, [activeTab]);
-
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = useCallback(async () => {
     try {
       const currentTab = tabs.find(t => t.key === activeTab);
       const res = await fetch(currentTab.api);
@@ -48,9 +42,9 @@ export default function Admin() {
       setData([]);
     }
     setLoading(false);
-  };
+  }, [activeTab]);
 
-  const fetchOptions = async () => {
+  const fetchOptions = useCallback(async () => {
     try {
       const [clientesRes, equiposRes, tecnicosRes, vendedoresRes, serviciosRes] = await Promise.all([
         fetch('/api/clientes'),
@@ -69,7 +63,13 @@ export default function Admin() {
     } catch (error) {
       console.error('Error fetching options:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+    fetchOptions();
+  }, [fetchData, fetchOptions]);
 
   const openCreateModal = () => {
     setFormData({});
