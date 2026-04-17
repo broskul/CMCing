@@ -134,9 +134,9 @@ const reportStyles = `
   }
 
   .tech-page {
-    border: 1px solid #111827;
-    background: #0b0f17;
-    color: #f8fafc;
+    border: 1px solid #d5deec;
+    background: #ffffff;
+    color: #111827;
     padding: 14px;
   }
   .tech-header {
@@ -149,13 +149,12 @@ const reportStyles = `
     width: 165px;
     height: auto;
     object-fit: contain;
-    filter: brightness(1.1);
   }
   .tech-code {
     text-align: right;
     font-size: 11px;
     line-height: 1.35;
-    color: #cbd5e1;
+    color: #334155;
   }
   .tech-line {
     border-top: 2px solid #e5e7eb;
@@ -228,7 +227,7 @@ const reportStyles = `
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     font-size: 10px;
-    color: #cbd5e1;
+    color: #334155;
   }
 `;
 
@@ -386,20 +385,40 @@ const generatePdfFromHtml = async ({ html, filename }) => {
   const html2pdf = (await import('html2pdf.js')).default;
 
   const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.left = '-20000px';
+  container.style.position = 'absolute';
+  container.style.left = '-10000px';
   container.style.top = '0';
-  container.style.width = '210mm';
-  container.style.zIndex = '-1';
+  container.style.width = '794px';
+  container.style.background = '#ffffff';
   container.innerHTML = html;
   document.body.appendChild(container);
 
   try {
+    const images = Array.from(container.querySelectorAll('img'));
+    await Promise.all(
+      images.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      })
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
     await html2pdf().set({
       margin: [5, 5, 5, 5],
       filename,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: container.scrollWidth,
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
     }).from(container).save();
