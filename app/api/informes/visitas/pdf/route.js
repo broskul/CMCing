@@ -1,10 +1,10 @@
-import { getInformeVisitas } from '../../../../lib/demo-store';
+import { getInformeVisitas } from '../../../../lib/cmms-store';
 import { createVisitasPdf } from '../../../../lib/reporting';
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const report = getInformeVisitas({
+    const report = await getInformeVisitas({
       desde: searchParams.get('desde') || '',
       hasta: searchParams.get('hasta') || '',
       estado: searchParams.get('estado') || 'todos',

@@ -1,92 +1,486 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ClienteEstado {
+  prospecto
+  activo
+  suspendido
+  inactivo
+}
+
+enum ContactoRol {
+  principal
+  compras
+  tecnico
+  facturacion
+  administracion
+  otro
+}
+
+enum DireccionTipo {
+  matriz
+  facturacion
+  despacho
+  servicio
+  otro
+}
+
+enum EmpleadoRol {
+  comercial
+  jefatura
+  tecnico
+  administrativo
+}
+
+enum EmpleadoEstado {
+  activo
+  inactivo
+}
+
+enum EquipoEstado {
+  operativo
+  observado
+  fuera_servicio
+  retirado
+}
+
+enum MantencionTipo {
+  preventiva
+  correctiva
+  calibracion
+  instalacion
+  spot
+  incidente
+}
+
+enum MantencionOrigen {
+  programada
+  solicitada
+  spot
+  incidente
+}
+
+enum CoberturaServicio {
+  garantia
+  contrato
+  cobrable
+  interno
+  sin_cobro
+}
+
+enum Prioridad {
+  baja
+  media
+  alta
+  critica
+}
+
+enum MantencionEstado {
+  borrador
+  programada
+  asignada
+  en_progreso
+  completada
+  cancelada
+}
+
+enum VisitaEstado {
+  pendiente
+  programada
+  en_progreso
+  completada
+  cancelada
+}
+
+enum IncidenteEstado {
+  abierto
+  en_revision
+  resuelto
+  cerrado
+  cancelado
+}
+
+enum ImagenVisitaTipo {
+  antes
+  durante
+  despues
+  evidencia
+  firma
+  placa
+  otro
 }
 
 model Cliente {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  email     String   @unique
-  telefono  String?
-  direccion String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo          String?             @unique
+  nombre          String
+  razonSocial     String?             @map("razon_social")
+  rut             String?             @unique
+  giro            String?
+  email           String?
+  telefono        String?
+  sitioWeb        String?             @map("sitio_web")
+  estado          ClienteEstado       @default(activo)
+  notas           String?
+  contactos       ClienteContacto[]
+  direcciones     ClienteDireccion[]
+  equipos         Equipo[]
+  asignaciones    EquipoAsignacion[]
+  mantenciones    Mantencion[]
+  incidentes      Incidente[]
+  visitas         Visita[]
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  equipos  Equipo[]
-  visitas  Visita[]
+  @@index([nombre])
+  @@map("clientes")
+}
+
+model ClienteContacto {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId   String      @map("cliente_id") @db.Uuid
+  nombre      String
+  cargo       String?
+  rol         ContactoRol @default(principal)
+  email       String?
+  telefono    String?
+  movil       String?
+  principal   Boolean     @default(false)
+  activo      Boolean     @default(true)
+  notas       String?
+  cliente     Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  incidentes  Incidente[]
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@index([email])
+  @@map("cliente_contactos")
+}
+
+model ClienteDireccion {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId      String              @map("cliente_id") @db.Uuid
+  tipo           DireccionTipo       @default(servicio)
+  nombre         String?
+  direccion      String
+  comuna         String?
+  ciudad         String?
+  region         String?
+  pais           String              @default("Chile")
+  codigoPostal   String?             @map("codigo_postal")
+  principal      Boolean             @default(false)
+  latitud        Float?
+  longitud       Float?
+  notas          String?
+  cliente        Cliente             @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  asignaciones   EquipoAsignacion[]
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@map("cliente_direcciones")
+}
+
+model EquipoModelo {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                   String
+  marca                    String?
+  modelo                   String?
+  categoria                String?
+  fabricante               String?
+  descripcion              String?
+  imagenUrl                String?   @map("imagen_url")
+  manualUrl                String?   @map("manual_url")
+  mantenimientoCadaDias    Int?      @map("mantenimiento_cada_dias")
+  garantiaMeses            Int?      @map("garantia_meses")
+  activo                   Boolean   @default(true)
+  equipos                  Equipo[]
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([marca, modelo])
+  @@map("equipo_modelos")
 }
 
 model Equipo {
-  id         Int      @id @default(autoincrement())
-  nombre     String
-  modelo     String
-  serial     String   @unique
-  clienteId  Int
-  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId         String               @map("cliente_id") @db.Uuid
+  modeloId          String?              @map("modelo_id") @db.Uuid
+  nombre            String
+  marca             String?
+  modelo            String?
+  nroSerie          String               @unique @map("nro_serie")
+  codigoInterno     String?              @unique @map("codigo_interno")
+  ubicacion         String?
+  fechaInstalacion  DateTime?            @map("fecha_instalacion") @db.Timestamptz(6)
+  garantiaHasta     DateTime?            @map("garantia_hasta") @db.Timestamptz(6)
+  estado            EquipoEstado         @default(operativo)
+  criticidad        Prioridad            @default(media)
+  imagenUrl         String?              @map("imagen_url")
+  notas             String?
+  cliente           Cliente              @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  modeloCatalogo    EquipoModelo?        @relation(fields: [modeloId], references: [id], onDelete: SetNull)
+  asignaciones      EquipoAsignacion[]
+  planes            PlanMantencion[]
+  mantenciones      MantencionEquipo[]
+  incidentes        Incidente[]
+  visitas           VisitaEquipo[]
+  imagenesVisita    VisitaImagen[]
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  visitas    Visita[]
+  @@index([clienteId])
+  @@index([estado])
+  @@map("equipos")
+}
+
+model EquipoAsignacion {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipoId      String            @map("equipo_id") @db.Uuid
+  clienteId     String            @map("cliente_id") @db.Uuid
+  direccionId   String?           @map("direccion_id") @db.Uuid
+  fechaInicio   DateTime          @default(now()) @map("fecha_inicio") @db.Timestamptz(6)
+  fechaFin      DateTime?         @map("fecha_fin") @db.Timestamptz(6)
+  motivo        String?
+  equipo        Equipo            @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  cliente       Cliente           @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  direccion     ClienteDireccion? @relation(fields: [direccionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([equipoId, fechaFin])
+  @@index([clienteId])
+  @@map("equipo_asignaciones")
+}
+
+model Empleado {
+  id                     String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                 String
+  email                  String           @unique
+  telefono               String?
+  cargo                  String?
+  especialidad           String?
+  roles                  EmpleadoRol[]    @default([])
+  estado                 EmpleadoEstado   @default(activo)
+  supervisorId           String?          @map("supervisor_id") @db.Uuid
+  supervisor             Empleado?        @relation("JerarquiaEmpleado", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinados           Empleado[]       @relation("JerarquiaEmpleado")
+  visitas                VisitaEmpleado[]
+  mantencionesComercial  Mantencion[]     @relation("MantencionComercial")
+  mantencionesJefatura   Mantencion[]     @relation("MantencionJefatura")
+  incidentesAsignados    Incidente[]      @relation("IncidenteAsignado")
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([estado])
+  @@index([supervisorId])
+  @@map("empleados")
 }
 
 model Servicio {
-  id          Int      @id @default(autoincrement())
-  descripcion String
-  precio      Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo        String?         @unique
+  descripcion   String
+  tipo          MantencionTipo  @default(preventiva)
+  precio        Float?
+  moneda        String          @default("CLP")
+  activo        Boolean         @default(true)
+  mantenciones  Mantencion[]
+  visitas       Visita[]
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  visitas     Visita[]
+  @@map("servicios")
 }
 
-model Vendedor {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  email     String   @unique
-  telefono  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model PlanMantencion {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipoId          String             @map("equipo_id") @db.Uuid
+  nombre            String
+  frecuenciaDias    Int                @map("frecuencia_dias")
+  ultimaFecha       DateTime?          @map("ultima_fecha") @db.Timestamptz(6)
+  proximaFecha      DateTime?          @map("proxima_fecha") @db.Timestamptz(6)
+  cobertura         CoberturaServicio  @default(contrato)
+  activo            Boolean            @default(true)
+  notas             String?
+  equipo            Equipo             @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  mantenciones      Mantencion[]
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  visitas   Visita[]
+  @@index([equipoId])
+  @@index([proximaFecha])
+  @@map("plan_mantenciones")
 }
 
-model Tecnico {
-  id           Int      @id @default(autoincrement())
-  nombre       String
-  especialidad String?
-  email        String   @unique
-  telefono     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+model Mantencion {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  folio              String?              @unique
+  clienteId          String               @map("cliente_id") @db.Uuid
+  planId             String?              @map("plan_id") @db.Uuid
+  incidenteId        String?              @map("incidente_id") @db.Uuid
+  servicioId         String?              @map("servicio_id") @db.Uuid
+  comercialId        String?              @map("comercial_id") @db.Uuid
+  jefaturaId         String?              @map("jefatura_id") @db.Uuid
+  tipo               MantencionTipo       @default(preventiva)
+  origen             MantencionOrigen     @default(programada)
+  cobertura          CoberturaServicio    @default(cobrable)
+  estado             MantencionEstado     @default(programada)
+  prioridad          Prioridad            @default(media)
+  titulo             String
+  descripcion        String?
+  diagnostico        String?
+  resolucion         String?
+  fechaProgramada    DateTime?            @map("fecha_programada") @db.Timestamptz(6)
+  fechaCompromiso    DateTime?            @map("fecha_compromiso") @db.Timestamptz(6)
+  fechaCierre        DateTime?            @map("fecha_cierre") @db.Timestamptz(6)
+  montoEstimado      Float?               @map("monto_estimado")
+  cliente            Cliente              @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  plan               PlanMantencion?      @relation(fields: [planId], references: [id], onDelete: SetNull)
+  incidente          Incidente?           @relation(fields: [incidenteId], references: [id], onDelete: SetNull)
+  servicio           Servicio?            @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  comercial          Empleado?            @relation("MantencionComercial", fields: [comercialId], references: [id], onDelete: SetNull)
+  jefatura           Empleado?            @relation("MantencionJefatura", fields: [jefaturaId], references: [id], onDelete: SetNull)
+  equipos            MantencionEquipo[]
+  visitas            Visita[]
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  visitas      Visita[]
+  @@index([clienteId])
+  @@index([estado])
+  @@index([fechaProgramada])
+  @@map("mantenciones")
+}
+
+model MantencionEquipo {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mantencionId   String       @map("mantencion_id") @db.Uuid
+  equipoId       String       @map("equipo_id") @db.Uuid
+  principal      Boolean      @default(false)
+  alcance        String?
+  mantencion     Mantencion   @relation(fields: [mantencionId], references: [id], onDelete: Cascade)
+  equipo         Equipo       @relation(fields: [equipoId], references: [id], onDelete: Restrict)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([mantencionId, equipoId])
+  @@index([equipoId])
+  @@map("mantencion_equipos")
+}
+
+model Incidente {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId         String             @map("cliente_id") @db.Uuid
+  equipoId          String?            @map("equipo_id") @db.Uuid
+  contactoId        String?            @map("contacto_id") @db.Uuid
+  asignadoAId       String?            @map("asignado_a_id") @db.Uuid
+  titulo            String
+  descripcion       String?
+  severidad         Prioridad          @default(media)
+  estado            IncidenteEstado    @default(abierto)
+  fechaReporte      DateTime           @default(now()) @map("fecha_reporte") @db.Timestamptz(6)
+  fechaCierre       DateTime?          @map("fecha_cierre") @db.Timestamptz(6)
+  causaRaiz         String?            @map("causa_raiz")
+  solucion          String?
+  cliente           Cliente            @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  equipo            Equipo?            @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  contacto          ClienteContacto?   @relation(fields: [contactoId], references: [id], onDelete: SetNull)
+  asignadoA         Empleado?          @relation("IncidenteAsignado", fields: [asignadoAId], references: [id], onDelete: SetNull)
+  mantenciones      Mantencion[]
+  visitas           Visita[]
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@index([equipoId])
+  @@index([estado])
+  @@map("incidentes")
 }
 
 model Visita {
-  id          Int       @id @default(autoincrement())
-  clienteId   Int
-  cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  equipoId    Int?
-  equipo      Equipo?   @relation(fields: [equipoId], references: [id], onDelete: SetNull)
-  tecnicoId   Int
-  tecnico     Tecnico   @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
-  vendedorId  Int?
-  vendedor    Vendedor? @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
-  servicioId  Int
-  servicio    Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
-  fecha       DateTime
-  descripcion String?
-  estado      String    @default("pendiente") // pendiente, en_progreso, completada, cancelada
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId           String            @map("cliente_id") @db.Uuid
+  mantencionId        String?           @map("mantencion_id") @db.Uuid
+  incidenteId         String?           @map("incidente_id") @db.Uuid
+  servicioId          String?           @map("servicio_id") @db.Uuid
+  fecha               DateTime          @db.Timestamptz(6)
+  fechaFin            DateTime?         @map("fecha_fin") @db.Timestamptz(6)
+  estado              VisitaEstado      @default(pendiente)
+  descripcion         String?
+  resultado           String?
+  recomendaciones     String?
+  firmaClienteNombre  String?           @map("firma_cliente_nombre")
+  cliente             Cliente           @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  mantencion          Mantencion?       @relation(fields: [mantencionId], references: [id], onDelete: SetNull)
+  incidente           Incidente?        @relation(fields: [incidenteId], references: [id], onDelete: SetNull)
+  servicio            Servicio?         @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  empleados           VisitaEmpleado[]
+  equipos             VisitaEquipo[]
+  imagenes            VisitaImagen[]
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@index([mantencionId])
+  @@index([fecha])
+  @@map("visitas")
+}
+
+model VisitaEmpleado {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  visitaId    String       @map("visita_id") @db.Uuid
+  empleadoId  String       @map("empleado_id") @db.Uuid
+  rol         EmpleadoRol?
+  principal   Boolean      @default(false)
+  horas       Float?
+  visita      Visita       @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  empleado    Empleado     @relation(fields: [empleadoId], references: [id], onDelete: Restrict)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([visitaId, empleadoId])
+  @@index([empleadoId])
+  @@map("visita_empleados")
+}
+
+model VisitaEquipo {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  visitaId    String   @map("visita_id") @db.Uuid
+  equipoId    String   @map("equipo_id") @db.Uuid
+  principal   Boolean  @default(false)
+  observacion String?
+  visita      Visita   @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  equipo      Equipo   @relation(fields: [equipoId], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([visitaId, equipoId])
+  @@index([equipoId])
+  @@map("visita_equipos")
+}
+
+model VisitaImagen {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  visitaId     String           @map("visita_id") @db.Uuid
+  equipoId     String?          @map("equipo_id") @db.Uuid
+  tipo         ImagenVisitaTipo @default(evidencia)
+  bucket       String
+  objectKey    String           @unique @map("object_key")
+  url          String?
+  mimeType     String?          @map("mime_type")
+  fileName     String?          @map("file_name")
+  sizeBytes    Int?             @map("size_bytes")
+  caption      String?
+  visita       Visita           @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  equipo       Equipo?          @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([visitaId])
+  @@index([equipoId])
+  @@map("visita_imagenes")
 }

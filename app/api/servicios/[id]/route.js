@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { deleteEntity, getServicio, updateEntity } from '../../../lib/demo-store';
+import { deleteServicio, getServicio, updateServicio } from '../../../lib/cmms-store';
 
 export async function GET(request, { params }) {
   try {
-    const servicio = getServicio(params.id);
+    const { id } = await params;
+    const servicio = await getServicio(id);
     if (!servicio) {
       return NextResponse.json({ error: 'Servicio not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const servicio = updateEntity('servicios', params.id, body);
+    const servicio = await updateServicio(id, body);
     if (!servicio) {
       return NextResponse.json({ error: 'Servicio not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = deleteEntity('servicios', params.id);
+    const { id } = await params;
+    const deleted = await deleteServicio(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Servicio not found' }, { status: 404 });
     }

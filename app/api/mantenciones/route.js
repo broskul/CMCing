@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createServicio, listServicios } from '../../lib/cmms-store';
+import { createMantencion, listMantenciones } from '../../lib/cmms-store';
 
 export async function GET() {
   try {
-    return NextResponse.json(await listServicios());
+    return NextResponse.json(await listMantenciones());
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -12,8 +12,8 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const servicio = await createServicio(body);
-    return NextResponse.json(servicio, { status: 201 });
+    const mantencion = await createMantencion(body);
+    return NextResponse.json(mantencion, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

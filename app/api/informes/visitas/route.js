@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getInformeVisitas } from '../../../lib/demo-store';
+import { getInformeVisitas } from '../../../lib/cmms-store';
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const data = getInformeVisitas({
+    const data = await getInformeVisitas({
       desde: searchParams.get('desde') || '',
       hasta: searchParams.get('hasta') || '',
       estado: searchParams.get('estado') || 'todos',

@@ -90,7 +90,7 @@ async function createVisitasPdf(data) {
   let fonts = await drawHeader({
     page,
     pdfDoc,
-    title: 'Informe de Visitas - Demo CMCing',
+    title: 'Informe de Visitas - CMCing CMMS',
     subtitle: `Emitido: ${formatDate(new Date())}`,
   });
 
@@ -118,7 +118,7 @@ async function createVisitasPdf(data) {
       fonts = await drawHeader({
         page,
         pdfDoc,
-        title: 'Informe de Visitas - Continuación',
+        title: 'Informe de Visitas - Continuacion',
         subtitle: `Emitido: ${formatDate(new Date())}`,
       });
       y = 700;
@@ -165,7 +165,7 @@ async function createFacturacionPdf(data) {
   const fonts = await drawHeader({
     page,
     pdfDoc,
-    title: 'Informe de Facturación - Demo CMCing',
+    title: 'Informe de Facturacion - CMCing CMMS',
     subtitle: `Emitido: ${formatDate(new Date())}`,
   });
 
@@ -274,7 +274,7 @@ function buildEmailHtml({ logoCid, title, subtitle, body, productos = [], footer
       <div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:14px;border:1px solid #e5e7eb;padding:24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
           <img src="cid:${logoCid}" alt="CMCiing" style="max-width:200px;max-height:62px;width:auto;height:auto;object-fit:contain;" />
-          <div style="text-align:right;font-size:12px;color:#6b7280;">Demo Comercial</div>
+          <div style="text-align:right;font-size:12px;color:#6b7280;">CMMS</div>
         </div>
         <h1 style="margin:18px 0 4px;font-size:22px;line-height:1.2;">${title}</h1>
         <p style="margin:0 0 16px;color:#4b5563;">${subtitle}</p>

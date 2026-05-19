@@ -3,151 +3,242 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Iniciando seed de datos...');
+  console.log('Iniciando seed CMMS CMCing...');
 
-  // Limpiar datos existentes (opcional, comentar si no deseas borrar)
-  // await prisma.visita.deleteMany({});
-  // await prisma.tecnico.deleteMany({});
-  // await prisma.vendedor.deleteMany({});
-  // await prisma.servicio.deleteMany({});
-  // await prisma.equipo.deleteMany({});
-  // await prisma.cliente.deleteMany({});
-
-  // Crear 2 Clientes
-  console.log('📋 Creando clientes...');
   const cliente1 = await prisma.cliente.create({
     data: {
-      nombre: 'Hospital Central',
-      email: 'contacto@hospitalcentral.cl',
-      telefono: '+56 9 1234 5678',
-      direccion: 'Av. Principal 100, Santiago',
+      nombre: 'Hospital Central Metropolitano',
+      rut: '76.000.001-1',
+      email: 'biomedica@hospitalcentral.cl',
+      telefono: '+56 2 2330 4500',
+      contactos: {
+        create: [{
+          nombre: 'Paula Medina',
+          cargo: 'Jefa de Ingenieria Clinica',
+          rol: 'tecnico',
+          email: 'paula.medina@hospitalcentral.cl',
+          telefono: '+56 9 7000 1001',
+          principal: true,
+        }],
+      },
+      direcciones: {
+        create: [{
+          tipo: 'servicio',
+          direccion: 'Av. Salud 1500',
+          comuna: 'Santiago',
+          ciudad: 'Santiago',
+          region: 'Metropolitana',
+          principal: true,
+        }],
+      },
     },
   });
 
   const cliente2 = await prisma.cliente.create({
     data: {
-      nombre: 'Clínica del Sur',
-      email: 'info@clinicadelsur.cl',
-      telefono: '+56 9 8765 4321',
-      direccion: 'Calle Salud 200, Valparaíso',
+      nombre: 'Clinica del Sur',
+      rut: '76.000.002-K',
+      email: 'soporte@clinicadelsur.cl',
+      telefono: '+56 41 221 9930',
+      contactos: {
+        create: [{
+          nombre: 'Rodrigo Vera',
+          cargo: 'Encargado de Mantencion',
+          rol: 'principal',
+          email: 'rodrigo.vera@clinicadelsur.cl',
+          telefono: '+56 9 7000 2001',
+          principal: true,
+        }],
+      },
+      direcciones: {
+        create: [{
+          tipo: 'servicio',
+          direccion: 'Camino Medico 442',
+          comuna: 'Concepcion',
+          ciudad: 'Concepcion',
+          region: 'Biobio',
+          principal: true,
+        }],
+      },
     },
   });
 
-  // Crear 2 Servicios
-  console.log('🔧 Creando servicios...');
-  const servicio1 = await prisma.servicio.create({
+  const [servicioPreventivo, servicioCorrectivo] = await Promise.all([
+    prisma.servicio.create({
+      data: {
+        codigo: 'PREV',
+        descripcion: 'Mantenimiento preventivo',
+        tipo: 'preventiva',
+        precio: 285000,
+      },
+    }),
+    prisma.servicio.create({
+      data: {
+        codigo: 'CORR',
+        descripcion: 'Diagnostico y reparacion',
+        tipo: 'correctiva',
+        precio: 420000,
+      },
+    }),
+  ]);
+
+  const jefatura = await prisma.empleado.create({
     data: {
-      descripcion: 'Mantenimiento preventivo',
-      precio: 150000,
+      nombre: 'Laura Pizarro',
+      email: 'laura.pizarro@cmcing.cl',
+      telefono: '+56 9 6000 1000',
+      cargo: 'Jefatura tecnica',
+      roles: ['jefatura'],
     },
   });
 
-  const servicio2 = await prisma.servicio.create({
+  const tecnico = await prisma.empleado.create({
     data: {
-      descripcion: 'Reparación de equipos',
-      precio: 250000,
+      nombre: 'Ana Rojas',
+      email: 'ana.rojas@cmcing.cl',
+      telefono: '+56 9 6000 1001',
+      cargo: 'Tecnica especialista',
+      especialidad: 'Biologia molecular',
+      roles: ['tecnico'],
+      supervisorId: jefatura.id,
     },
   });
 
-  // Crear 2 Vendedores
-  console.log('👔 Creando vendedores...');
-  const vendedor1 = await prisma.vendedor.create({
+  const comercial = await prisma.empleado.create({
     data: {
-      nombre: 'Carlos García',
-      email: 'carlos@cmcing.cl',
-      telefono: '+56 9 1111 1111',
+      nombre: 'Carlos Mena',
+      email: 'carlos.mena@cmcing.cl',
+      telefono: '+56 9 6000 2001',
+      cargo: 'Ejecutivo comercial',
+      roles: ['comercial'],
     },
   });
 
-  const vendedor2 = await prisma.vendedor.create({
-    data: {
-      nombre: 'María López',
-      email: 'maria@cmcing.cl',
-      telefono: '+56 9 2222 2222',
-    },
-  });
-
-  // Crear 2 Técnicos
-  console.log('🛠️ Creando técnicos...');
-  const tecnico1 = await prisma.tecnico.create({
-    data: {
-      nombre: 'Juan Pérez',
-      especialidad: 'Equipos de diagnóstico',
-      email: 'juan@cmcing.cl',
-      telefono: '+56 9 3333 3333',
-    },
-  });
-
-  const tecnico2 = await prisma.tecnico.create({
-    data: {
-      nombre: 'Ana Martínez',
-      especialidad: 'Equipos de laboratorio',
-      email: 'ana@cmcing.cl',
-      telefono: '+56 9 4444 4444',
-    },
-  });
-
-  // Crear 2 Equipos (asociados a clientes)
-  console.log('⚙️ Creando equipos...');
   const equipo1 = await prisma.equipo.create({
     data: {
-      nombre: 'Resonancia Magnética',
-      modelo: 'SIEMENS MAGNETOM',
-      serial: 'RM-2024-001',
       clienteId: cliente1.id,
+      nombre: 'Termociclador',
+      marca: 'CMCing',
+      modelo: 'EQ-BM 68',
+      nroSerie: 'TC-BM68-2026-019',
+      ubicacion: 'Laboratorio PCR',
+      garantiaHasta: new Date('2027-05-01T00:00:00Z'),
+      imagenUrl: '/productos/termociclador-eq-bm-68-ref.png',
+      asignaciones: {
+        create: [{
+          clienteId: cliente1.id,
+          motivo: 'Alta inicial',
+        }],
+      },
     },
   });
 
   const equipo2 = await prisma.equipo.create({
     data: {
-      nombre: 'Ecógrafo Ultrasónico',
-      modelo: 'GE LOGIQ E10',
-      serial: 'ECO-2024-002',
       clienteId: cliente2.id,
+      nombre: 'Gabinete A2',
+      marca: 'CMCing',
+      modelo: 'EQ-MO-86',
+      nroSerie: 'GB-A2-2026-114',
+      ubicacion: 'Sala de procesamiento',
+      imagenUrl: '/productos/gabinete-a2-eq-mo-86-ref.jpg',
+      asignaciones: {
+        create: [{
+          clienteId: cliente2.id,
+          motivo: 'Alta inicial',
+        }],
+      },
     },
   });
 
-  // Crear 2 Visitas
-  console.log('📅 Creando visitas...');
-  const visita1 = await prisma.visita.create({
+  await prisma.planMantencion.create({
     data: {
-      clienteId: cliente1.id,
       equipoId: equipo1.id,
-      tecnicoId: tecnico1.id,
-      vendedorId: vendedor1.id,
-      servicioId: servicio1.id,
-      fecha: new Date('2025-03-15T09:00:00'),
-      descripcion: 'Mantenimiento preventivo regular del equipo de RM',
-      estado: 'completada',
+      nombre: 'Preventivo trimestral',
+      frecuenciaDias: 90,
+      proximaFecha: new Date('2026-06-15T09:00:00Z'),
+      cobertura: 'garantia',
     },
   });
 
-  const visita2 = await prisma.visita.create({
+  const mantencion = await prisma.mantencion.create({
+    data: {
+      folio: 'MT-2026-0001',
+      clienteId: cliente1.id,
+      servicioId: servicioPreventivo.id,
+      comercialId: comercial.id,
+      jefaturaId: jefatura.id,
+      tipo: 'preventiva',
+      origen: 'programada',
+      cobertura: 'garantia',
+      estado: 'programada',
+      titulo: 'Preventivo trimestral termociclador',
+      fechaProgramada: new Date('2026-06-15T09:00:00Z'),
+      equipos: {
+        create: [{
+          equipoId: equipo1.id,
+          principal: true,
+          alcance: 'Limpieza, verificacion y pruebas funcionales',
+        }],
+      },
+    },
+  });
+
+  const incidente = await prisma.incidente.create({
     data: {
       clienteId: cliente2.id,
       equipoId: equipo2.id,
-      tecnicoId: tecnico2.id,
-      vendedorId: vendedor2.id,
-      servicioId: servicio2.id,
-      fecha: new Date('2025-03-18T14:30:00'),
-      descripcion: 'Reparación del cabezal del ecógrafo',
-      estado: 'en_progreso',
+      asignadoAId: tecnico.id,
+      titulo: 'Alarma de flujo irregular',
+      descripcion: 'Cliente reporta alarma intermitente durante uso.',
+      severidad: 'alta',
+      estado: 'abierto',
     },
   });
 
-  console.log('✅ Seed completado exitosamente!');
-  console.log('\n📊 Datos creados:');
-  console.log(`   - Clientes: ${cliente1.nombre}, ${cliente2.nombre}`);
-  console.log(`   - Servicios: ${servicio1.descripcion}, ${servicio2.descripcion}`);
-  console.log(`   - Vendedores: ${vendedor1.nombre}, ${vendedor2.nombre}`);
-  console.log(`   - Técnicos: ${tecnico1.nombre}, ${tecnico2.nombre}`);
-  console.log(`   - Equipos: ${equipo1.nombre}, ${equipo2.nombre}`);
-  console.log(`   - Visitas: ${visita1.id}, ${visita2.id}`);
+  await prisma.visita.create({
+    data: {
+      clienteId: cliente1.id,
+      mantencionId: mantencion.id,
+      servicioId: servicioPreventivo.id,
+      fecha: new Date('2026-06-15T09:00:00Z'),
+      estado: 'programada',
+      descripcion: 'Visita programada de mantenimiento preventivo.',
+      equipos: {
+        create: [{ equipoId: equipo1.id, principal: true }],
+      },
+      empleados: {
+        create: [
+          { empleadoId: tecnico.id, rol: 'tecnico', principal: true },
+          { empleadoId: comercial.id, rol: 'comercial' },
+        ],
+      },
+    },
+  });
+
+  await prisma.visita.create({
+    data: {
+      clienteId: cliente2.id,
+      incidenteId: incidente.id,
+      servicioId: servicioCorrectivo.id,
+      fecha: new Date('2026-05-24T14:30:00Z'),
+      estado: 'pendiente',
+      descripcion: 'Revision inicial por incidente reportado.',
+      equipos: {
+        create: [{ equipoId: equipo2.id, principal: true }],
+      },
+      empleados: {
+        create: [{ empleadoId: tecnico.id, rol: 'tecnico', principal: true }],
+      },
+    },
+  });
+
+  console.log('Seed CMMS completado.');
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Error durante el seed:', e);
+  .catch((error) => {
+    console.error('Error durante el seed:', error);
     process.exit(1);
   })
   .finally(async () => {
