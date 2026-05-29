@@ -3,7 +3,7 @@
 ## Estado vigente
 
 Ultima actualizacion: 2026-05-29.
-La autenticacion directa usa usuarios reales en Supabase. Ya no existen credenciales locales ni usuarios bootstrap embebidos en runtime.
+La autenticacion directa usa usuarios reales en Supabase. Ya no existen credenciales locales ni usuarios bootstrap embebidos en runtime. Login real validado contra `Usuario`.
 
 ## Objetivo del modulo
 
@@ -69,7 +69,7 @@ npm run create:user -- --email tecnico@dominio.cl --password "clave-segura" --na
 ## Riesgos y bugs conocidos
 
 - La autorizacion fina por rol aun no esta implementada; hoy una sesion valida entra a todos los endpoints internos.
-- QA 2026-05-29: `SUPABASE_SERVICE_ROLE_KEY` esta configurada y permite CRUD server, pero `Usuario` aun no aparece en PostgREST; login real y `npm run create:user` siguen bloqueados hasta ejecutar/refrescar la migracion auth/offline.
+- QA 2026-05-29: `Usuario` ya aparece en PostgREST, `npm run create:user` funciona y login real fue validado con cookie HTTP-only.
 - Si la llave server configurada no corresponde al proyecto o no tiene permisos sobre `Usuario`, login y bootstrap fallan.
 - Falta pantalla administrativa para cambio de contrasena.
 
