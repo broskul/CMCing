@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getInformeFacturacion, getInformeVisitas } from '../../../lib/demo-store';
+import { getInformeFacturacion, getInformeVisitas } from '../../../lib/supabase-store';
 import {
   buildEmailHtml,
   createFacturacionPdf,
@@ -31,7 +31,7 @@ export async function POST(request) {
     }
 
     if (reportType === 'visitas') {
-      const report = getInformeVisitas({ desde, hasta, estado, clienteId });
+      const report = await getInformeVisitas({ desde, hasta, estado, clienteId });
       const pdf = await createVisitasPdf(report);
       const { attachments: inlineAttachments, productAssets } = await createMailAssets(report.productos);
 
@@ -67,7 +67,7 @@ export async function POST(request) {
           </table>
         `,
         productos: productAssets,
-        footer: 'Correo emitido por la demo CMCing. Los datos son de prueba y se mantienen en memoria.',
+        footer: 'Correo emitido por CMCing.',
       });
 
       const attachments = [
@@ -83,7 +83,7 @@ export async function POST(request) {
       await sendMailByGraph({
         to,
         cc,
-        subject: '[DEMO] Informe de Visitas CMCing',
+        subject: 'Informe de Visitas CMCing',
         html,
         attachments,
       });
@@ -91,7 +91,7 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Correo enviado correctamente' });
     }
 
-    const report = getInformeFacturacion({ desde, hasta });
+    const report = await getInformeFacturacion({ desde, hasta });
     const pdf = await createFacturacionPdf(report);
     const { attachments: inlineAttachments, productAssets } = await createMailAssets(report.productos);
 
@@ -125,7 +125,7 @@ export async function POST(request) {
         </table>
       `,
       productos: productAssets,
-      footer: 'Correo emitido por la demo CMCing. Los datos son de prueba y se mantienen en memoria.',
+      footer: 'Correo emitido por CMCing.',
     });
 
     const attachments = [
@@ -141,7 +141,7 @@ export async function POST(request) {
     await sendMailByGraph({
       to,
       cc,
-      subject: '[DEMO] Informe de Facturación CMCing',
+      subject: 'Informe de Facturación CMCing',
       html,
       attachments,
     });

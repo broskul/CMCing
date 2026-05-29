@@ -2,84 +2,65 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-04-17.
-El modulo de informes opera en modo demo sobre datos en memoria.
+Ultima actualizacion: 2026-05-29.
+Informes y cotizaciones generan PDF y correo HTML usando datos reales desde Supabase. El informe tecnico individual se acerco al formato historico CMCing usado en los PDFs de referencia.
 
 ## Objetivo del modulo
 
-Permitir generar y presentar informes operativos de visitas y facturacion, con exportacion CSV, exportacion PDF y envio por correo HTML con PDF adjunto.
+Emitir documentos comerciales y tecnicos con branding CMCing:
+
+- informe de visitas,
+- informe tecnico por visita,
+- informe de facturacion,
+- cotizacion.
 
 ## Fuentes de verdad y sistemas externos
 
-- Fuente de datos principal: `app/lib/demo-store.js`.
-- Generacion PDF: `pdf-lib` via `app/lib/reporting.js`.
-- Generacion PDF cliente para informe de visitas: `html2pdf.js` en `app/informes/visitas/page.js`.
-- Correo: API interna `app/api/informes/email/route.js` (usa MS Graph).
-- Assets visuales: logo y productos en `public/brand/` y `public/productos/`.
+- Datos runtime:
+  - `app/lib/supabase-store.js`
+- Generacion PDF server-side:
+  - `pdf-lib` en `app/lib/reporting.js`
+- Generacion PDF cliente:
+  - `html2pdf.js` en `app/informes/visitas/page.js`
+- Correo:
+  - MS Graph en `app/api/informes/email/route.js`
+  - MS Graph en `app/api/cotizaciones/[id]/email/route.js`
+- Referencias visuales:
+  - PDFs historicos entregados por usuario.
 
 ## Flujo funcional real
 
-1. Usuario filtra desde UI:
-- `app/informes/visitas/page.js`
-- `app/informes/facturacion/page.js`
-
-2. UI consume API de informe:
-- `GET /api/informes/visitas`
-- `GET /api/informes/facturacion`
-
-3. Exportaciones:
-- CSV se genera en cliente.
-- Informe completo de visitas se genera en cliente con `html2pdf` (no usa `window.print`).
-- Informe tecnico individual por visita se genera en cliente con `html2pdf`.
-- PDF se genera en servidor:
-  - `GET /api/informes/visitas/pdf`
-  - `GET /api/informes/facturacion/pdf`
-- Para visitas con multiples equipos, el informe consolida y muestra el listado de equipos (no solo uno).
-
-4. Envio email:
-- UI llama `POST /api/informes/email`.
-- Se construye HTML bonito con logo y tarjetas de productos.
-- Se adjunta PDF del informe.
-
-## Archivos clave
-
-- `app/informes/visitas/page.js`
-- `app/informes/facturacion/page.js`
-- `app/api/informes/visitas/route.js`
-- `app/api/informes/facturacion/route.js`
-- `app/api/informes/visitas/pdf/route.js`
-- `app/api/informes/facturacion/pdf/route.js`
-- `app/api/informes/email/route.js`
-- `app/lib/reporting.js`
-- `app/lib/demo-store.js`
+- `/informes/visitas` filtra visitas desde Supabase y genera:
+  - PDF completo,
+  - PDF tecnico por visita.
+- `/informes/facturacion` exporta PDF y envia correo.
+- `/cotizaciones` crea cotizacion, exporta PDF y envia correo.
+- Informes tecnicos incluyen datos de equipo, objetivo, especificaciones, secciones numeradas, firma, selfie si existe y listado de evidencias.
 
 ## Decisiones tecnicas vigentes
 
-- Se mantiene `pdf-lib` para PDF server-side (API y adjuntos de correo).
-- Se incorpora `html2pdf.js` para el informe completo de visitas y el informe tecnico por visita desde la UI.
-- Se incluye logo CMCing y fotos de productos en PDF y correo.
-- El logo se renderiza con `object-fit: contain` para que se vea completo.
-- En mail, imagenes inline se envian como `cid` attachments.
+- El informe tecnico HTML replica la estructura principal del PDF historico:
+  - logo superior,
+  - fecha/codigo a la derecha,
+  - destinatario/ref,
+  - titulo `INFORME TECNICO`,
+  - datos del equipo,
+  - objetivo/especificaciones,
+  - secciones con encabezado gris,
+  - footer CMCing.
+- Firma del tecnico se compone de texto e imagen.
+- Selfie capturada al firmar se adjunta al servicio y puede aparecer en informe si tiene URL publica.
+- Los correos usan HTML con branding y PDF adjunto.
 
 ## Riesgos y bugs conocidos
 
-- El informe tecnico HTML aproxima el formato de referencia, pero no replica al 100% cada detalle del PDF historico.
-- Textos largos en tarjetas PDF se recortan para evitar desbordes.
-- No hay versionado ni historial de informes enviados.
-
-## Workarounds actuales
-
-- Si hay error de envio, el endpoint devuelve detalle y la UI lo muestra.
-- Si faltan filtros, el informe opera con rango abierto.
+- Si R2 no expone URL publica, imagenes de firma/selfie quedan registradas pero no renderizan en PDF HTML.
+- `html2pdf.js` puede variar saltos de pagina segun navegador.
+- PDFs historicos tienen detalles finos que aun no estan replicados al 100%.
+- Si Supabase no tiene datos o migraciones, los informes se generan vacios o fallan por tabla faltante.
 
 ## Pendientes reales y proximos pasos
 
-- Mejorar maquetacion PDF (saltos de pagina y tablas mas ricas).
-- Agregar bitacora de correos enviados (id, fecha, destinatarios, estado).
-- Definir templates separados para "interno" vs "cliente final" si cambia tono.
-- Incorporar opcion de logos secundarios o firma comercial dinamica.
-
-## Notas para presentacion y onboarding
-
-- El flujo demo ya permite simular el caso real completo: filtrar -> exportar PDF -> enviar correo.
-- Recalcar que los datos son de prueba y viven en memoria del proceso.
+- Ajustar paginacion del informe tecnico para servicios largos.
+- Incorporar plantillas por tipo de equipo/servicio.
+- Guardar version emitida del informe y bitacora de envios.

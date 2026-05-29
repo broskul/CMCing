@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getInformeFacturacion } from '../../../lib/demo-store';
+import { getInformeFacturacion } from '../../../lib/supabase-store';
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const data = getInformeFacturacion({
+    const data = await getInformeFacturacion({
       desde: searchParams.get('desde') || '',
       hasta: searchParams.get('hasta') || '',
     });

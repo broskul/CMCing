@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getDashboardStats } from '../../lib/demo-store';
+import { getDashboardStats } from '../../lib/supabase-store';
 
 export async function GET() {
   try {
-    const response = NextResponse.json(getDashboardStats());
+    const response = NextResponse.json(await getDashboardStats());
     response.headers.set('Cache-Control', 'no-store');
     return response;
   } catch (error) {

@@ -1,24 +1,37 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 
 const fieldConfigs = {
   clientes: ['nombre', 'email', 'telefono', 'direccion'],
-  equipos: ['nombre', 'modelo', 'serial', 'clienteId', 'imagenUrl'],
-  servicios: ['descripcion', 'precio'],
+  equipos: ['sku', 'nombre', 'modelo', 'serial', 'fabricante', 'ubicacion', 'estadoOperativo', 'criticidad', 'clienteId', 'imagenUrl'],
+  servicios: ['descripcion', 'precio', 'tipo', 'duracionEstimadaMin', 'activo'],
+  actividades: ['nombre', 'descripcion', 'tipo', 'duracionEstimadaMin', 'obligatoria', 'activa'],
   vendedores: ['nombre', 'email', 'telefono'],
-  tecnicos: ['nombre', 'especialidad', 'email', 'telefono'],
-  visitas: ['clienteId', 'equipoId', 'tecnicoId', 'vendedorId', 'servicioId', 'fecha', 'descripcion', 'estado'],
+  tecnicos: ['nombre', 'especialidad', 'email', 'telefono', 'firmaTexto', 'firmaImagenUrl', 'activo'],
+  visitas: ['clienteId', 'equipoId', 'tecnicoId', 'vendedorId', 'servicioId', 'fecha', 'descripcion', 'notasTecnicas', 'estado'],
 };
 
 const tabs = [
   { key: 'clientes', label: 'Clientes', api: '/api/clientes' },
   { key: 'equipos', label: 'Equipos', api: '/api/equipos' },
   { key: 'servicios', label: 'Servicios', api: '/api/servicios' },
+  { key: 'actividades', label: 'Actividades', api: '/api/actividades' },
   { key: 'vendedores', label: 'Vendedores', api: '/api/vendedores' },
   { key: 'tecnicos', label: 'Técnicos', api: '/api/tecnicos' },
   { key: 'visitas', label: 'Visitas', api: '/api/visitas' },
 ];
+
+const createLabels = {
+  clientes: 'Nuevo cliente',
+  equipos: 'Nuevo equipo',
+  servicios: 'Nuevo servicio',
+  actividades: 'Nueva actividad',
+  vendedores: 'Nuevo vendedor',
+  tecnicos: 'Nuevo técnico',
+  visitas: 'Nueva visita',
+};
 
 const relationKeysById = {
   clienteId: 'cliente',
@@ -34,7 +47,12 @@ const fieldLabels = {
   telefono: 'Teléfono',
   direccion: 'Dirección',
   modelo: 'Modelo',
+  sku: 'SKU',
   serial: 'Serial',
+  fabricante: 'Fabricante',
+  ubicacion: 'Ubicación',
+  estadoOperativo: 'Estado operativo',
+  criticidad: 'Criticidad',
   imagenUrl: 'Imagen',
   cliente: 'Cliente',
   clienteId: 'Cliente',
@@ -48,9 +66,17 @@ const fieldLabels = {
   servicioId: 'Servicio',
   fecha: 'Fecha',
   descripcion: 'Descripción',
+  notasTecnicas: 'Notas técnicas',
   estado: 'Estado',
   especialidad: 'Especialidad',
+  firmaTexto: 'Texto firma',
+  firmaImagenUrl: 'Imagen firma',
   precio: 'Precio',
+  tipo: 'Tipo',
+  duracionEstimadaMin: 'Duración estimada',
+  activo: 'Activo',
+  obligatoria: 'Obligatoria',
+  activa: 'Activa',
   visitas: 'Visitas',
   equipos: 'Equipos',
 };
@@ -79,8 +105,11 @@ const formatFriendlyDate = (value) => {
   }).format(date);
 };
 
-export default function Admin() {
-  const [activeTab, setActiveTab] = useState('clientes');
+function AdminContent() {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('modulo');
+  const activeTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : 'clientes';
+  const activeTabConfig = tabs.find((tab) => tab.key === activeTab) || tabs[0];
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -91,6 +120,7 @@ export default function Admin() {
   const [viewData, setViewData] = useState({ title: '', items: [] });
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
       const currentTab = tabs.find(t => t.key === activeTab);
       const res = await fetch(currentTab.api);
@@ -143,8 +173,8 @@ export default function Admin() {
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSubmit = async (e) => {
@@ -167,6 +197,9 @@ export default function Admin() {
         payload[key] = parseInt(payload[key]);
       });
       if (payload.precio) payload.precio = parseFloat(payload.precio);
+      ['activo', 'activa', 'obligatoria'].forEach((key) => {
+        if (key in payload) payload[key] = Boolean(payload[key]);
+      });
       if (payload.fecha) payload.fecha = new Date(payload.fecha).toISOString();
 
       if (isEditing) {
@@ -222,6 +255,7 @@ export default function Admin() {
     if (fieldName.includes('telefono')) return 'tel';
     if (fieldName.includes('fecha')) return 'datetime-local';
     if (fieldName.includes('precio')) return 'number';
+    if (['activo', 'activa', 'obligatoria'].includes(fieldName)) return 'checkbox';
     if (fieldName.includes('Id')) return 'select';
     return 'text';
   };
@@ -239,7 +273,7 @@ export default function Admin() {
     if (!sampleItem) return [];
 
     if (activeTab === 'visitas') {
-      return ['cliente', 'equipos', 'tecnico', 'vendedor', 'servicio', 'fecha', 'descripcion', 'estado'];
+      return ['cliente', 'equipos', 'tecnico', 'servicio', 'fecha', 'estado'];
     }
 
     return Object.keys(sampleItem)
@@ -248,6 +282,16 @@ export default function Admin() {
   };
 
   const getColumnLabel = (key) => fieldLabels[key] || key;
+
+  const getInputValue = (field, value) => {
+    if (!value) return '';
+    if (getFieldType(field) === 'datetime-local') {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
+    }
+    return value;
+  };
 
   const getDisplayValue = (item, key) => {
     const value = item[key];
@@ -277,93 +321,89 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="panel mb-6 p-6">
-          <p className="text-[0.85rem] uppercase tracking-[0.18em] text-neutral-500">Gestión</p>
-          <h1 className="mt-1 text-[1.65rem] font-semibold text-neutral-900">Backoffice CMCing</h1>
-        </div>
-        <div className="mb-6 flex justify-between items-center">
-          <nav className="flex flex-wrap gap-2">
-            {tabs.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`rounded-xl px-4 py-2 text-[0.9rem] font-medium transition ${
-                  activeTab === tab.key
-                    ? 'bg-neutral-900 text-white'
-                    : 'panel text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-          <button
-            onClick={openCreateModal}
-            className="rounded-xl bg-emerald-700 px-4 py-2 text-[0.9rem] font-medium text-white transition hover:bg-emerald-600"
-          >
-            + Nuevo
-          </button>
-        </div>
-        <div className="panel p-6">
-          <h2 className="mb-4 text-[1.15rem] font-semibold text-neutral-900">{tabs.find(t => t.key === activeTab).label}</h2>
+    <div className="admin-page min-h-screen">
+      <div className="admin-shell">
+        <header className="admin-header">
+          <div className="admin-title-block">
+            <p className="admin-eyebrow">Backoffice</p>
+            <h1>Maestro de {activeTabConfig.label}</h1>
+          </div>
+          <div className="admin-header-actions">
+            <span className="admin-count-badge">{loading ? '...' : data.length} registros</span>
+            <button
+              onClick={openCreateModal}
+              className="primary-action"
+            >
+              {createLabels[activeTab] || 'Nuevo registro'}
+            </button>
+          </div>
+        </header>
+
+        <section className="admin-card">
+          <div className="admin-tablebar">
+            <h2>{activeTabConfig.label}</h2>
+          </div>
           {loading ? (
-            <p>Cargando...</p>
+            <div className="admin-empty">Cargando...</div>
+          ) : data.length === 0 ? (
+            <div className="admin-empty">Sin registros.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="admin-table-scroll">
               {(() => {
                 const tableColumns = data.length > 0 ? getTableColumns(data[0]) : [];
                 return (
-              <table className="min-w-full">
+              <table className="admin-table">
                 <thead>
-                  <tr className="bg-neutral-100/80">
+                  <tr>
                     {tableColumns.map(key => (
-                      <th key={key} className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">{getColumnLabel(key)}</th>
+                      <th key={key}>{getColumnLabel(key)}</th>
                     ))}
-                    <th className="px-4 py-3 text-left text-[0.82rem] font-semibold uppercase tracking-wide text-neutral-600">Acciones</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.map(item => (
-                    <tr key={item.id} className="border-t border-neutral-200 hover:bg-neutral-50">
+                    <tr key={item.id}>
                       {tableColumns.map(key => {
                         const value = item[key];
                         const isArray = Array.isArray(value);
                         return (
-                          <td key={key} className="px-4 py-3 text-[0.9rem] text-neutral-700">
+                          <td key={key} data-label={getColumnLabel(key)}>
                             {isArray && key !== 'equipos' ? (
                               <button
                                 onClick={() => handleViewRelated(key, value, key)}
-                                className="rounded-lg bg-sky-700 px-2 py-1 text-[0.76rem] font-medium text-white transition hover:bg-sky-600"
+                                className="relation-pill"
                               >
-                                Ver ({value.length})
+                                <span className="relation-pill-count">{value.length}</span>
+                                <span>registros</span>
                               </button>
                             ) : key === 'estado' ? (
                               <span className={`inline-flex rounded-full px-2 py-1 text-[0.76rem] font-medium ${estadoClasses[item.estado] || 'bg-neutral-100 text-neutral-700'}`}>
                                 {getDisplayValue(item, key)}
                               </span>
                             ) : (
-                              <span className={key === 'descripcion' ? 'inline-block max-w-[22rem]' : ''}>
+                              <span className={key === 'descripcion' ? 'admin-table-value is-long' : 'admin-table-value'}>
                                 {getDisplayValue(item, key).slice(0, 120)}
                               </span>
                             )}
                           </td>
                         );
                       })}
-                      <td className="px-4 py-3 text-sm space-x-2">
-                        <button
-                          onClick={() => openEditModal(item)}
-                          className="rounded-lg bg-neutral-900 px-3 py-1 text-[0.76rem] font-medium text-white transition hover:bg-neutral-700"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-lg bg-rose-700 px-3 py-1 text-[0.76rem] font-medium text-white transition hover:bg-rose-600"
-                        >
-                          Eliminar
-                        </button>
+                      <td data-label="Acciones" className="admin-actions-cell">
+                        <div className="row-actions">
+                          <button
+                            onClick={() => openEditModal(item)}
+                            className="table-action table-action-edit"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="table-action table-action-delete"
+                          >
+                            Borrar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -373,13 +413,13 @@ export default function Admin() {
               })()}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md max-h-96 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-8 shadow-2xl">
-            <h3 className="mb-4 text-[1.25rem] font-semibold text-neutral-900">{isEditing ? 'Editar' : 'Crear'} {tabs.find(t => t.key === activeTab).label}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+          <div className="w-full max-w-md max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-5 shadow-2xl sm:p-8">
+            <h3 className="mb-4 text-[1.25rem] font-semibold text-neutral-900">{isEditing ? 'Editar' : 'Crear'} {activeTabConfig.label}</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               {fieldConfigs[activeTab].map(field => {
                 const fieldType = getFieldType(field);
@@ -388,12 +428,12 @@ export default function Admin() {
                 if (fieldType === 'select' && selectOptions.length > 0) {
                   return (
                     <div key={field}>
-                      <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{field}</label>
+                      <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{getColumnLabel(field)}</label>
                       <select
                         name={field}
                         value={formData[field] || ''}
                         onChange={handleInputChange}
-                        required
+                        required={!['vendedorId', 'equipoId'].includes(field)}
                         className="input-base"
                       >
                         <option value="">Seleccionar...</option>
@@ -405,32 +445,46 @@ export default function Admin() {
                   );
                 }
 
+                if (fieldType === 'checkbox') {
+                  return (
+                    <label key={field} className="flex items-center gap-2 text-[0.85rem] font-medium text-neutral-700">
+                      <input
+                        type="checkbox"
+                        name={field}
+                        checked={Boolean(formData[field])}
+                        onChange={handleInputChange}
+                      />
+                      {getColumnLabel(field)}
+                    </label>
+                  );
+                }
+
                 return (
                   <div key={field}>
-                    <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{field}</label>
+                    <label className="mb-1 block text-[0.85rem] font-medium text-neutral-700">{getColumnLabel(field)}</label>
                     <input
                       type={fieldType}
                       name={field}
-                      value={formData[field] || ''}
+                      value={getInputValue(field, formData[field])}
                       onChange={handleInputChange}
-                      required={fieldType !== 'tel' && fieldType !== 'select'}
+                      required={!['tel', 'text'].includes(fieldType) || !['telefono', 'imagenUrl', 'firmaImagenUrl', 'fabricante', 'ubicacion', 'notasTecnicas'].includes(field)}
                       step={fieldType === 'number' ? '0.01' : undefined}
                       className="input-base"
                     />
                   </div>
                 );
               })}
-              <div className="flex gap-2 mt-6">
+              <div className="mt-6 grid gap-2 sm:grid-cols-2">
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-neutral-900 px-4 py-2 text-[0.9rem] font-medium text-white transition hover:bg-neutral-700"
+                  className="rounded-lg bg-neutral-900 px-4 py-2 text-[0.9rem] font-medium text-white transition hover:bg-neutral-700"
                 >
                   Guardar
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-neutral-200 px-4 py-2 text-[0.9rem] font-medium text-neutral-800 transition hover:bg-neutral-300"
+                  className="rounded-lg bg-neutral-200 px-4 py-2 text-[0.9rem] font-medium text-neutral-800 transition hover:bg-neutral-300"
                 >
                   Cancelar
                 </button>
@@ -441,8 +495,8 @@ export default function Admin() {
       )}
 
       {viewModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-96 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+          <div className="w-full max-w-4xl max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-lg bg-white p-5 sm:p-8">
             <h3 className="text-2xl font-bold mb-4">{viewData.title}</h3>
             {viewData.items.length > 0 ? (
               <div className="overflow-x-auto">
@@ -478,5 +532,13 @@ export default function Admin() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Admin() {
+  return (
+    <Suspense fallback={<div className="min-h-screen p-6 md:p-8"><div className="panel p-6">Cargando...</div></div>}>
+      <AdminContent />
+    </Suspense>
   );
 }

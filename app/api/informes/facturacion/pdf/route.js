@@ -1,10 +1,10 @@
-import { getInformeFacturacion } from '../../../../lib/demo-store';
+import { getInformeFacturacion } from '../../../../lib/supabase-store';
 import { createFacturacionPdf } from '../../../../lib/reporting';
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const report = getInformeFacturacion({
+    const report = await getInformeFacturacion({
       desde: searchParams.get('desde') || '',
       hasta: searchParams.get('hasta') || '',
     });

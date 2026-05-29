@@ -50,6 +50,8 @@ const getPrimaryEquipo = (visita) => getEquipos(visita)[0] || null;
 const getAssetUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('data:')) return url;
+  if (url.startsWith('r2://')) return '';
   if (typeof window === 'undefined') return url;
   return `${window.location.origin}${url}`;
 };
@@ -134,10 +136,10 @@ const reportStyles = `
   }
 
   .tech-page {
-    border: 1px solid #d5deec;
     background: #ffffff;
     color: #111827;
-    padding: 14px;
+    min-height: 277mm;
+    padding: 4mm 7mm;
   }
   .tech-header {
     display: flex;
@@ -146,23 +148,43 @@ const reportStyles = `
     gap: 10px;
   }
   .tech-header img {
-    width: 165px;
+    width: 178px;
     height: auto;
     object-fit: contain;
   }
   .tech-code {
     text-align: right;
-    font-size: 11px;
-    line-height: 1.35;
-    color: #334155;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #111827;
+    font-weight: 700;
   }
   .tech-line {
-    border-top: 2px solid #e5e7eb;
-    margin: 10px 0 12px;
+    border-top: 3px solid #d8d8d8;
+    margin: 8px 0 12px;
+  }
+  .tech-address {
+    margin: 22px 0 18px 28px;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 700;
+  }
+  .tech-title {
+    margin: 0 0 18px;
+    text-align: center;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .equipment-heading {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 800;
   }
   .tech-grid {
     display: grid;
-    grid-template-columns: 1.4fr 0.85fr;
+    grid-template-columns: 1fr 210px;
     gap: 10px;
     align-items: start;
   }
@@ -172,56 +194,95 @@ const reportStyles = `
     font-size: 11px;
   }
   .tech-meta td {
-    border: 1px solid #e5e7eb;
-    padding: 5px;
+    border: 0;
+    padding: 2px 5px 2px 0;
     vertical-align: top;
     background: #ffffff;
     color: #111827;
+    font-size: 13px;
   }
   .tech-meta td.label {
-    width: 26%;
+    width: 150px;
     font-weight: 700;
-    background: #f4f6fa;
+    background: #ffffff;
   }
   .tech-photo {
-    border: 1px solid #e5e7eb;
     background: #ffffff;
-    border-radius: 4px;
-    min-height: 210px;
+    min-height: 145px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 2px;
   }
   .tech-photo img {
     width: 100%;
-    max-height: 190px;
+    max-height: 160px;
     object-fit: contain;
   }
-  .tech-block {
-    margin-top: 9px;
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
-    color: #111827;
+  .classic-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 12px;
   }
-  .tech-block-title {
-    background: #edf2fb;
-    border-bottom: 1px solid #d9e1ef;
-    font-size: 11px;
+  .classic-table td {
+    border: 1px solid #a9a9a9;
+    padding: 4px 6px;
+    vertical-align: top;
+  }
+  .classic-table .label-row {
     font-weight: 700;
-    padding: 5px 7px;
+  }
+  .section-bar {
+    margin-top: 18px;
+    border-bottom: 1px solid #cfcfcf;
+    background: #eeeeee;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 800;
     text-transform: uppercase;
   }
-  .tech-block-body {
-    padding: 7px;
+  .checkline {
+    display: grid;
+    grid-template-columns: 18px 1fr 58px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+  .checkbox-mark {
+    width: 7px;
+    height: 7px;
+    border: 1px solid #111827;
+  }
+  .xbox {
+    border: 1px solid #6b7280;
+    padding: 2px 0;
+    text-align: center;
+    font-weight: 800;
+  }
+  .signature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .signature-box {
+    min-height: 86px;
+    border-top: 1px solid #9ca3af;
+    padding-top: 6px;
     font-size: 11px;
-    line-height: 1.45;
-    min-height: 52px;
-    white-space: pre-line;
+  }
+  .signature-box img {
+    max-height: 58px;
+    max-width: 180px;
+    object-fit: contain;
+    display: block;
+    margin-bottom: 4px;
   }
   .tech-footer {
-    margin-top: 10px;
-    border-top: 1px solid #e5e7eb;
+    margin-top: 18px;
+    border-top: 2px solid #9ca3af;
     padding-top: 8px;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -240,33 +301,42 @@ const buildTechnicalVisitSection = (visita, index) => {
 
   const objetivo = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica y condiciones operativas del cliente.';
   const especificaciones = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos correspondan al proceso esperado.';
-  const estadoInicial = estadoInicialTexto[visita.estado] || estadoInicialTexto.pendiente;
   const trabajos = visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.';
-  const resultadoFinal = `Estado de cierre: ${estadoLabels[visita.estado] || visita.estado || '-'}. Se deja registro técnico de visita para trazabilidad.`;
+  const resultadoFinal = visita.notasTecnicas || `Estado de cierre: ${estadoLabels[visita.estado] || visita.estado || '-'}. Se deja registro técnico de visita para trazabilidad.`;
   const recomendaciones = 'Mantener plan de mantenimiento preventivo, validar calibración periódica y documentar cualquier desviación operativa.';
+  const firmaImagenUrl = visita.firmaTecnicoImagenUrl || visita.tecnico?.firmaImagenUrl || '';
+  const selfie = Array.isArray(visita.adjuntos) ? visita.adjuntos.find((adjunto) => adjunto.tipo === 'selfie_firma') : null;
+  const evidencias = Array.isArray(visita.adjuntos) ? visita.adjuntos.filter((adjunto) => adjunto.tipo === 'evidencia') : [];
 
   return `
     <section class="tech-page ${index > 0 ? 'page-break' : ''}">
       <div class="tech-header">
         <img src="${escapeHtml(getAssetUrl('/brand/logo-cmcing.png'))}" alt="CMCiing" />
         <div class="tech-code">
-          Informe Técnico de Visita<br/>
-          ID visita: ${escapeHtml(visita.id)}<br/>
-          Fecha emisión: ${escapeHtml(new Date().toLocaleString('es-CL'))}
+          ${escapeHtml(new Date(visita.fecha).toLocaleDateString('es-CL', { dateStyle: 'long' }))}<br/>
+          IT_${escapeHtml(new Date(visita.fecha).getFullYear())} ${escapeHtml(String(visita.id).padStart(4, '0'))} / ${escapeHtml(visita.cliente?.nombre || 'CLIENTE')}
         </div>
       </div>
+
+      <div class="tech-address">
+        Sres. ${escapeHtml(visita.cliente?.nombre || '-')}<br/>
+        Att. : Responsable de mantención<br/>
+        Ref. : Informe Técnico de ${escapeHtml(visita.servicio?.descripcion || 'Servicio Técnico')}.
+      </div>
+
       <div class="tech-line"></div>
+      <h1 class="tech-title">INFORME TÉCNICO</h1>
+      <p class="equipment-heading">DATOS DEL EQUIPO</p>
 
       <div class="tech-grid">
         <table class="tech-meta">
           <tbody>
-            <tr><td class="label">Cliente</td><td>${escapeHtml(visita.cliente?.nombre || '-')}</td></tr>
-            <tr><td class="label">Equipos</td><td>${escapeHtml(equiposListado)}</td></tr>
-            <tr><td class="label">Servicio</td><td>${escapeHtml(visita.servicio?.descripcion || '-')}</td></tr>
-            <tr><td class="label">Técnico</td><td>${escapeHtml(visita.tecnico?.nombre || '-')}</td></tr>
-            <tr><td class="label">Vendedor</td><td>${escapeHtml(visita.vendedor?.nombre || '-')}</td></tr>
-            <tr><td class="label">Fecha visita</td><td>${escapeHtml(formatFriendlyDate(visita.fecha))}</td></tr>
-            <tr><td class="label">Estado</td><td>${escapeHtml(estadoLabels[visita.estado] || visita.estado || '-')}</td></tr>
+            <tr><td class="label">EQUIPO</td><td>${escapeHtml(primaryEquipo?.nombre || getEquiposLabel(visita))}</td></tr>
+            <tr><td class="label">MARCA</td><td>${escapeHtml(primaryEquipo?.fabricante || '-')}</td></tr>
+            <tr><td class="label">MODELO</td><td>${escapeHtml(primaryEquipo?.modelo || '-')}</td></tr>
+            <tr><td class="label">N° SERIE</td><td>${escapeHtml(primaryEquipo?.serial || '-')}</td></tr>
+            <tr><td class="label">SKU / IDENTIFICACIÓN</td><td>${escapeHtml(primaryEquipo?.sku || '-')}</td></tr>
+            <tr><td class="label">UBICACIÓN</td><td>${escapeHtml(primaryEquipo?.ubicacion || '-')}</td></tr>
           </tbody>
         </table>
 
@@ -275,39 +345,48 @@ const buildTechnicalVisitSection = (visita, index) => {
         </div>
       </div>
 
-      <div class="tech-block">
-        <div class="tech-block-title">Objetivo</div>
-        <div class="tech-block-body">- ${escapeHtml(objetivo)}</div>
-      </div>
+      <table class="classic-table">
+        <tbody>
+          <tr><td class="label-row">OBJETIVO</td></tr>
+          <tr><td>- ${escapeHtml(objetivo)}</td></tr>
+          <tr><td class="label-row">ESPECIFICACIONES</td></tr>
+          <tr><td>- ${escapeHtml(especificaciones)}</td></tr>
+        </tbody>
+      </table>
 
-      <div class="tech-block">
-        <div class="tech-block-title">Especificaciones</div>
-        <div class="tech-block-body">- ${escapeHtml(especificaciones)}</div>
-      </div>
+      <div class="section-bar">I. Estado inicial</div>
+      ${['Chequeo primario de funcionamiento', 'Chequeo estructural, accesorios y componentes', 'Chequeo de controles y comandos', 'Chequeo de conexiones eléctricas'].map((item) => `
+        <div class="checkline"><span class="checkbox-mark"></span><span>${item}</span><span class="xbox">X</span></div>
+      `).join('')}
 
-      <div class="tech-block">
-        <div class="tech-block-title">I. Estado inicial</div>
-        <div class="tech-block-body">${escapeHtml(estadoInicial)}</div>
-      </div>
+      <div class="section-bar">II. Trabajos realizados y reportes</div>
+      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(trabajos)}</div>
 
-      <div class="tech-block">
-        <div class="tech-block-title">II. Trabajos realizados y reportes</div>
-        <div class="tech-block-body">${escapeHtml(trabajos)}</div>
-      </div>
+      <div class="section-bar">III. Resultado final</div>
+      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(resultadoFinal)}</div>
 
-      <div class="tech-block">
-        <div class="tech-block-title">III. Resultado final</div>
-        <div class="tech-block-body">${escapeHtml(resultadoFinal)}</div>
-      </div>
+      <div class="section-bar">IV. Recomendaciones</div>
+      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(recomendaciones)}</div>
 
-      <div class="tech-block">
-        <div class="tech-block-title">IV. Recomendaciones</div>
-        <div class="tech-block-body">${escapeHtml(recomendaciones)}</div>
+      ${evidencias.length ? `
+        <div class="section-bar">V. Evidencias adjuntas</div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.5;">${evidencias.map((adjunto) => escapeHtml(adjunto.nombreOriginal || adjunto.r2Key || 'Adjunto')).join('<br/>')}</div>
+      ` : ''}
+
+      <div class="signature-grid">
+        <div class="signature-box">
+          ${firmaImagenUrl ? `<img src="${escapeHtml(getAssetUrl(firmaImagenUrl))}" alt="Firma técnico" />` : ''}
+          ${escapeHtml(visita.firmaTecnicoTexto || visita.tecnico?.firmaTexto || visita.tecnico?.nombre || '-')}
+        </div>
+        <div class="signature-box">
+          ${selfie?.publicUrl ? `<img src="${escapeHtml(getAssetUrl(selfie.publicUrl))}" alt="Foto técnico" />` : ''}
+          Foto de validación al firmar
+        </div>
       </div>
 
       <div class="tech-footer">
-        <div>Firma técnico responsable: ${escapeHtml(visita.tecnico?.nombre || '-')}</div>
-        <div style="text-align:right;">CMCiing - Informe técnico por visita</div>
+        <div><strong>CMC Ingeniería y Servicios.</strong><br/>Beaucheff 1699 - Santiago</div>
+        <div style="text-align:right;">Fono: (56-9) 77667626<br/>Web: www.cmcing.cl</div>
       </div>
     </section>
   `;
@@ -610,7 +689,6 @@ export default function InformeVisitasPage() {
         <section className="panel p-6">
           <p className="text-[0.85rem] uppercase tracking-[0.18em] text-neutral-500">Informe 1</p>
           <h1 className="mt-1 text-[1.6rem] font-semibold text-neutral-900">Informe de Visitas</h1>
-          <p className="mt-2 text-[0.92rem] text-neutral-600">Ahora el PDF completo se genera con html2pdf (formato informe) y cada visita puede emitir su informe técnico en PDF individual.</p>
         </section>
 
         <section className="panel p-5">

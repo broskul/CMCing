@@ -90,7 +90,7 @@ async function createVisitasPdf(data) {
   let fonts = await drawHeader({
     page,
     pdfDoc,
-    title: 'Informe de Visitas - Demo CMCing',
+    title: 'Informe de Visitas - CMCing',
     subtitle: `Emitido: ${formatDate(new Date())}`,
   });
 
@@ -165,7 +165,7 @@ async function createFacturacionPdf(data) {
   const fonts = await drawHeader({
     page,
     pdfDoc,
-    title: 'Informe de Facturación - Demo CMCing',
+    title: 'Informe de Facturación - CMCing',
     subtitle: `Emitido: ${formatDate(new Date())}`,
   });
 
@@ -245,6 +245,66 @@ async function createFacturacionPdf(data) {
   return Buffer.from(await pdfDoc.save());
 }
 
+async function createCotizacionPdf(cotizacion) {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595, 842]);
+  const fonts = await drawHeader({
+    page,
+    pdfDoc,
+    title: `Cotización ${cotizacion.numero || `#${cotizacion.id}`}`,
+    subtitle: `Emitida: ${formatDate(cotizacion.fecha || new Date())}`,
+  });
+
+  let y = 680;
+  const cliente = cotizacion.cliente?.nombre || '-';
+  const vendedor = cotizacion.vendedor?.nombre || '-';
+
+  page.drawText(`Cliente: ${cliente}`, { x: 30, y, size: 11, font: fonts.fontBold, color: rgb(0.1, 0.14, 0.2) });
+  y -= 18;
+  page.drawText(`Vendedor: ${vendedor}`, { x: 30, y, size: 10, font: fonts.fontRegular, color: rgb(0.25, 0.28, 0.34) });
+  y -= 18;
+  page.drawText(`Estado: ${cotizacion.estado || '-'} | Válida hasta: ${cotizacion.validaHasta ? new Date(cotizacion.validaHasta).toLocaleDateString('es-CL') : '-'}`, {
+    x: 30,
+    y,
+    size: 10,
+    font: fonts.fontRegular,
+    color: rgb(0.25, 0.28, 0.34),
+  });
+
+  y -= 30;
+  page.drawRectangle({ x: 30, y: y - 22, width: 535, height: 22, color: rgb(0.94, 0.96, 0.99) });
+  page.drawText('Descripción', { x: 40, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Cant.', { x: 340, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Unitario', { x: 395, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Total', { x: 495, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  y -= 28;
+
+  for (const item of cotizacion.items || []) {
+    if (y < 150) break;
+    page.drawText(String(item.descripcion || '-').slice(0, 58), { x: 40, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+    page.drawText(String(item.cantidad || 0), { x: 345, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+    page.drawText(money(item.precioUnitario), { x: 395, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+    page.drawText(money(item.lineaTotal), { x: 495, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+    y -= 18;
+  }
+
+  y -= 16;
+  page.drawLine({ start: { x: 360, y }, end: { x: 565, y }, thickness: 1, color: rgb(0.85, 0.87, 0.91) });
+  y -= 18;
+  page.drawText(`Subtotal: ${money(cotizacion.subtotal)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+  y -= 16;
+  page.drawText(`IVA: ${money(cotizacion.impuestoMonto)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+  y -= 20;
+  page.drawText(`Total: ${money(cotizacion.total)}`, { x: 395, y, size: 12, font: fonts.fontBold, color: rgb(0.1, 0.14, 0.2) });
+
+  if (cotizacion.observaciones) {
+    page.drawText('Observaciones:', { x: 30, y: 130, size: 10, font: fonts.fontBold, color: rgb(0.15, 0.18, 0.25) });
+    page.drawText(String(cotizacion.observaciones).slice(0, 110), { x: 30, y: 114, size: 9, font: fonts.fontRegular, color: rgb(0.25, 0.28, 0.34) });
+  }
+
+  return Buffer.from(await pdfDoc.save());
+}
+
 function splitRecipients(value) {
   return String(value || '')
     .split(',')
@@ -274,7 +334,7 @@ function buildEmailHtml({ logoCid, title, subtitle, body, productos = [], footer
       <div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:14px;border:1px solid #e5e7eb;padding:24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
           <img src="cid:${logoCid}" alt="CMCiing" style="max-width:200px;max-height:62px;width:auto;height:auto;object-fit:contain;" />
-          <div style="text-align:right;font-size:12px;color:#6b7280;">Demo Comercial</div>
+          <div style="text-align:right;font-size:12px;color:#6b7280;">CMCiing</div>
         </div>
         <h1 style="margin:18px 0 4px;font-size:22px;line-height:1.2;">${title}</h1>
         <p style="margin:0 0 16px;color:#4b5563;">${subtitle}</p>
@@ -385,6 +445,7 @@ async function sendMailByGraph({ to, cc, subject, html, attachments }) {
 
 export {
   buildEmailHtml,
+  createCotizacionPdf,
   createFacturacionPdf,
   createMailAssets,
   createVisitasPdf,

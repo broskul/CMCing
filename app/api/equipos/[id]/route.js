@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { deleteEntity, getEquipo, updateEntity } from '../../../lib/demo-store';
+import { deleteEntity, getEquipo, updateEntity } from '../../../lib/supabase-store';
 
 export async function GET(request, { params }) {
   try {
-    const equipo = getEquipo(params.id);
+    const equipo = await getEquipo(params.id);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const body = await request.json();
-    const equipo = updateEntity('equipos', params.id, body);
+    const equipo = await updateEntity('equipos', params.id, body);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
@@ -28,7 +28,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = deleteEntity('equipos', params.id);
+    const deleted = await deleteEntity('equipos', params.id);
     if (!deleted) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }

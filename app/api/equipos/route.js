@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createEntity, listEquipos } from '../../lib/demo-store';
+import { createEntity, listEquipos } from '../../lib/supabase-store';
 
 export async function GET() {
   try {
-    return NextResponse.json(listEquipos());
+    return NextResponse.json(await listEquipos());
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -12,7 +12,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const equipo = createEntity('equipos', body);
+    const equipo = await createEntity('equipos', body);
     return NextResponse.json(equipo, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
