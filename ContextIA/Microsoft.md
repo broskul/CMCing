@@ -62,10 +62,10 @@ Tambien se aceptan los nombres actuales de Cloudflare:
 ## Riesgos y bugs conocidos
 
 - QA 2026-05-29 envio informes de visitas y facturacion por Graph a `carlos@prof3sional.com` correctamente.
+- QA 2026-05-29 envio cotizacion `COT-2026-000003` por Graph a `carlos@prof3sional.com` correctamente.
 - Requiere permiso `Mail.Send` de aplicacion y consentimiento admin.
 - Algunos clientes pueden bloquear imagenes inline.
 
 ## Pendientes reales y proximos pasos
 
-- Probar envio real de cotizacion cuando RLS permita crear `Cotizacion`.
 - Persistir bitacora de correos enviados.

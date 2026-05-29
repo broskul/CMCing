@@ -3,7 +3,8 @@ import { deleteEntity, getCotizacion, updateEntity } from '../../../lib/supabase
 
 export async function GET(request, { params }) {
   try {
-    const cotizacion = await getCotizacion(params.id);
+    const { id } = await params;
+    const cotizacion = await getCotizacion(id);
     if (!cotizacion) {
       return NextResponse.json({ error: 'Cotizacion not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const cotizacion = await updateEntity('cotizaciones', params.id, body);
+    const cotizacion = await updateEntity('cotizaciones', id, body);
     if (!cotizacion) {
       return NextResponse.json({ error: 'Cotizacion not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = await deleteEntity('cotizaciones', params.id);
+    const { id } = await params;
+    const deleted = await deleteEntity('cotizaciones', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Cotizacion not found' }, { status: 404 });
     }

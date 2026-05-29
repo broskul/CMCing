@@ -3,7 +3,8 @@ import { deleteEntity, getActividad, updateEntity } from '../../../lib/supabase-
 
 export async function GET(request, { params }) {
   try {
-    const actividad = await getActividad(params.id);
+    const { id } = await params;
+    const actividad = await getActividad(id);
     if (!actividad) {
       return NextResponse.json({ error: 'Actividad not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const actividad = await updateEntity('actividades', params.id, body);
+    const actividad = await updateEntity('actividades', id, body);
     if (!actividad) {
       return NextResponse.json({ error: 'Actividad not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = await deleteEntity('actividades', params.id);
+    const { id } = await params;
+    const deleted = await deleteEntity('actividades', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Actividad not found' }, { status: 404 });
     }

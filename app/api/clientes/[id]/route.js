@@ -3,7 +3,8 @@ import { deleteEntity, getCliente, updateEntity } from '../../../lib/supabase-st
 
 export async function GET(request, { params }) {
   try {
-    const cliente = await getCliente(params.id);
+    const { id } = await params;
+    const cliente = await getCliente(id);
     if (!cliente) {
       return NextResponse.json({ error: 'Cliente not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const cliente = await updateEntity('clientes', params.id, body);
+    const cliente = await updateEntity('clientes', id, body);
     if (!cliente) {
       return NextResponse.json({ error: 'Cliente not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = await deleteEntity('clientes', params.id);
+    const { id } = await params;
+    const deleted = await deleteEntity('clientes', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Cliente not found' }, { status: 404 });
     }

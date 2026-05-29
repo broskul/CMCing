@@ -587,7 +587,6 @@ async function insertCotizacionItems(cotizacionId, items) {
       cantidad: calculated.cantidad,
       precioUnitario: calculated.precioUnitario,
       descuentoPct: calculated.descuentoPct,
-      lineaTotal: calculated.lineaTotal,
       orden: Number(item.orden || index + 1),
     };
   });

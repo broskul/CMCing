@@ -4,7 +4,8 @@ import { createCotizacionPdf } from '../../../../lib/reporting';
 
 export async function GET(request, { params }) {
   try {
-    const cotizacion = await getCotizacion(params.id);
+    const { id } = await params;
+    const cotizacion = await getCotizacion(id);
     if (!cotizacion) {
       return NextResponse.json({ error: 'Cotizacion not found' }, { status: 404 });
     }

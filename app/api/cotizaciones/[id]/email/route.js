@@ -11,7 +11,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Debes indicar al menos un destinatario.' }, { status: 400 });
     }
 
-    const cotizacion = await getCotizacion(params.id);
+    const { id } = await params;
+    const cotizacion = await getCotizacion(id);
     if (!cotizacion) {
       return NextResponse.json({ error: 'Cotizacion not found' }, { status: 404 });
     }

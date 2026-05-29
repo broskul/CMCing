@@ -59,7 +59,8 @@ Emitir documentos comerciales y tecnicos con branding CMCing:
 - PDFs historicos tienen detalles finos que aun no estan replicados al 100%.
 - Si Supabase no tiene datos o migraciones, los informes se generan vacios o fallan por tabla faltante.
 - QA 2026-05-29 genero PDFs de visitas/facturacion y envio ambos informes por MS Graph a `carlos@prof3sional.com`.
-- Cotizaciones no pudieron probarse end-to-end porque `Cotizacion` esta bloqueada por RLS con anon key.
+- QA 2026-05-29 con service role genero PDF de cotizacion `COT-2026-000003` y envio la cotizacion por MS Graph a `carlos@prof3sional.com`.
+- Las rutas dinamicas `[id]` deben esperar `params` en Next 16; se corrigio para CRUD/PDF/email de recursos por id.
 
 ## Pendientes reales y proximos pasos
 

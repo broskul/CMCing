@@ -3,7 +3,8 @@ import { deleteEntity, getEquipo, updateEntity } from '../../../lib/supabase-sto
 
 export async function GET(request, { params }) {
   try {
-    const equipo = await getEquipo(params.id);
+    const { id } = await params;
+    const equipo = await getEquipo(id);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const equipo = await updateEntity('equipos', params.id, body);
+    const equipo = await updateEntity('equipos', id, body);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = await deleteEntity('equipos', params.id);
+    const { id } = await params;
+    const deleted = await deleteEntity('equipos', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }

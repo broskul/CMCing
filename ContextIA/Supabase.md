@@ -68,6 +68,9 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En es
 - Las pruebas E2E dependen de que anon tenga permisos o de configurar service role real.
 - La DB actual esta parcialmente migrada: faltan `Usuario`, `ArchivoAdjunto`, `ColaSincronizacion` y algunas columnas nuevas de equipos/tecnicos.
 - QA 2026-05-29 con anon key: permite crear `Cliente`, `Vendedor`, `Tecnico`, `Servicio`, `Equipo` y `Visita`; bloquea por RLS inserts en `Actividad`, `Cotizacion`, `VisitaEquipo` y trigger de `EquipoHojaVida` al completar visitas.
+- QA 2026-05-29 con service role: ya permite crear `Actividad`, `Visita` completada, `VisitaEquipo` y hoja de vida; `CotizacionItem.lineaTotal` se omite en insert porque la DB lo calcula como columna generada.
+- QA 2026-05-29 con service role completo: creo cliente, vendedor, tecnico Cristian Manzor, servicio, actividad, equipo, visita completada y cotizacion `COT-2026-000003`; genero PDFs y envio correos.
+- Login real sigue pendiente porque `Usuario` no aparece en PostgREST; falta ejecutar o refrescar la migracion auth/offline para exponer esa tabla.
 - Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
 - Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
 

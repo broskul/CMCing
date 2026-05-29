@@ -3,7 +3,8 @@ import { deleteEntity, getTecnico, updateEntity } from '../../../lib/supabase-st
 
 export async function GET(request, { params }) {
   try {
-    const tecnico = await getTecnico(params.id);
+    const { id } = await params;
+    const tecnico = await getTecnico(id);
     if (!tecnico) {
       return NextResponse.json({ error: 'Técnico not found' }, { status: 404 });
     }
@@ -15,8 +16,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const { id } = await params;
     const body = await request.json();
-    const tecnico = await updateEntity('tecnicos', params.id, body);
+    const tecnico = await updateEntity('tecnicos', id, body);
     if (!tecnico) {
       return NextResponse.json({ error: 'Técnico not found' }, { status: 404 });
     }
@@ -28,7 +30,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const deleted = await deleteEntity('tecnicos', params.id);
+    const { id } = await params;
+    const deleted = await deleteEntity('tecnicos', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Técnico not found' }, { status: 404 });
     }
