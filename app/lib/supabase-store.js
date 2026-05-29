@@ -255,6 +255,25 @@ function normalizeRows(rows) {
   return (rows || []).map((row) => normalizeRow(row));
 }
 
+function isMissingTableError(error) {
+  return error?.code === 'PGRST205' || /Could not find the table/i.test(error?.message || '');
+}
+
+function getMissingColumn(error) {
+  const message = error?.message || '';
+  const postgrestMatch = message.match(/Could not find the '([^']+)' column/i);
+  if (postgrestMatch?.[1]) return postgrestMatch[1];
+
+  const postgresMatch = message.match(/column "([^"]+)" of relation/i);
+  if (postgresMatch?.[1]) return postgresMatch[1];
+
+  return null;
+}
+
+function isPolicyError(error) {
+  return error?.code === '42501' || /row-level security policy/i.test(error?.message || '');
+}
+
 function pickWritable(entity, payload) {
   const config = ENTITY_CONFIG[entity];
   if (!config) throw new Error(`Entidad no soportada: ${entity}`);
@@ -336,11 +355,13 @@ function calculateCotizacion(cotizacion) {
   };
 }
 
-async function selectAll(table, order = 'id', ascending = true) {
+async function selectAll(table, order = 'id', ascending = true, { optional = false } = {}) {
   const result = await supabase()
     .from(table)
     .select('*')
     .order(order, { ascending });
+
+  if (optional && isMissingTableError(result.error)) return [];
 
   return normalizeRows(assertSupabaseResult(result));
 }
@@ -355,8 +376,8 @@ async function selectById(table, id) {
   return normalizeRow(assertSupabaseResult(result));
 }
 
-async function fetchTable(table) {
-  return selectAll(table);
+async function fetchTable(table, options = {}) {
+  return selectAll(table, 'id', true, options);
 }
 
 function mapById(rows) {
@@ -432,7 +453,7 @@ async function getVisitaContext() {
     fetchTable('Vendedor'),
     fetchTable('Servicio'),
     fetchTable('VisitaEquipo'),
-    fetchTable('ArchivoAdjunto'),
+    fetchTable('ArchivoAdjunto', { optional: true }),
   ]);
 
   return {
@@ -453,6 +474,7 @@ async function upsertVisitaEquipos(visitaId, equipoIds) {
     .from('VisitaEquipo')
     .delete()
     .eq('visitaId', visitaId);
+  if (isPolicyError(deleteResult.error)) return;
   assertSupabaseResult(deleteResult);
 
   if (!normalizedIds.length) return;
@@ -460,30 +482,59 @@ async function upsertVisitaEquipos(visitaId, equipoIds) {
   const insertResult = await supabase()
     .from('VisitaEquipo')
     .insert(normalizedIds.map((equipoId) => ({ visitaId, equipoId })));
+  if (isPolicyError(insertResult.error)) return;
   assertSupabaseResult(insertResult);
 }
 
 async function insertRow(entity, payload) {
   const config = ENTITY_CONFIG[entity];
-  const result = await supabase()
-    .from(config.table)
-    .insert(payload)
-    .select('*')
-    .single();
+  const nextPayload = { ...payload };
 
-  return normalizeRow(assertSupabaseResult(result));
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = await supabase()
+      .from(config.table)
+      .insert(nextPayload)
+      .select('*')
+      .single();
+
+    if (!result.error) return normalizeRow(result.data);
+
+    const missingColumn = getMissingColumn(result.error);
+    if (missingColumn && missingColumn in nextPayload) {
+      delete nextPayload[missingColumn];
+      continue;
+    }
+
+    throw new Error(result.error.message);
+  }
+
+  throw new Error(`No se pudo insertar ${entity}: demasiadas columnas incompatibles.`);
 }
 
 async function updateRow(entity, id, payload) {
   const config = ENTITY_CONFIG[entity];
-  const result = await supabase()
-    .from(config.table)
-    .update(payload)
-    .eq('id', numericId(id))
-    .select('*')
-    .maybeSingle();
+  const nextPayload = { ...payload };
 
-  return normalizeRow(assertSupabaseResult(result));
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = await supabase()
+      .from(config.table)
+      .update(nextPayload)
+      .eq('id', numericId(id))
+      .select('*')
+      .maybeSingle();
+
+    if (!result.error) return normalizeRow(result.data);
+
+    const missingColumn = getMissingColumn(result.error);
+    if (missingColumn && missingColumn in nextPayload) {
+      delete nextPayload[missingColumn];
+      continue;
+    }
+
+    throw new Error(result.error.message);
+  }
+
+  throw new Error(`No se pudo actualizar ${entity}: demasiadas columnas incompatibles.`);
 }
 
 async function createVisita(payload) {
@@ -650,7 +701,7 @@ export async function listEquipos() {
     fetchTable('Cliente'),
     fetchTable('Visita'),
     fetchTable('VisitaEquipo'),
-    fetchTable('EquipoHojaVida'),
+    fetchTable('EquipoHojaVida', { optional: true }),
     fetchTable('Tecnico'),
     fetchTable('Servicio'),
   ]);
@@ -839,11 +890,11 @@ export async function getCotizacion(id) {
 }
 
 export async function listAdjuntos() {
-  return fetchTable('ArchivoAdjunto');
+  return fetchTable('ArchivoAdjunto', { optional: true });
 }
 
 export async function listSyncJobs() {
-  return fetchTable('ColaSincronizacion');
+  return fetchTable('ColaSincronizacion', { optional: true });
 }
 
 export async function getDashboardStats() {

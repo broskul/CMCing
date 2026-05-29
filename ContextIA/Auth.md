@@ -38,13 +38,13 @@ Permitir acceso controlado con usuario y contrasena sin depender de Microsoft/En
 Variables requeridas:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` o `NEXT_PUBLIC_SUPABASE_ANON_KEY` con permisos suficientes.
 
 Variable recomendada:
 
 - `APP_SESSION_SECRET`
 
-Si `APP_SESSION_SECRET` no existe, la firma de sesion usa `SUPABASE_SERVICE_ROLE_KEY` como respaldo.
+Si `APP_SESSION_SECRET` no existe, la firma de sesion usa `SUPABASE_SERVICE_ROLE_KEY`, `MSGRAPH_CLIENT_SECRET` o la llave anon como respaldo.
 
 Para crear o actualizar un usuario real:
 
@@ -69,7 +69,7 @@ npm run create:user -- --email tecnico@dominio.cl --password "clave-segura" --na
 ## Riesgos y bugs conocidos
 
 - La autorizacion fina por rol aun no esta implementada; hoy una sesion valida entra a todos los endpoints internos.
-- Si `SUPABASE_SERVICE_ROLE_KEY` no corresponde al proyecto configurado, login y bootstrap fallan.
+- Si la llave server configurada no corresponde al proyecto o no tiene permisos sobre `Usuario`, login y bootstrap fallan.
 - Falta pantalla administrativa para cambio de contrasena.
 
 ## Pendientes reales y proximos pasos

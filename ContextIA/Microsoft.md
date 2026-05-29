@@ -61,12 +61,11 @@ Tambien se aceptan los nombres actuales de Cloudflare:
 
 ## Riesgos y bugs conocidos
 
-- Faltan credenciales reales en `.env.local` para completar pruebas E2E.
+- QA 2026-05-29 envio informes de visitas y facturacion por Graph a `carlos@prof3sional.com` correctamente.
 - Requiere permiso `Mail.Send` de aplicacion y consentimiento admin.
 - Algunos clientes pueden bloquear imagenes inline.
 
 ## Pendientes reales y proximos pasos
 
-- Completar credenciales de Graph.
-- Probar envio real de informe y cotizacion.
+- Probar envio real de cotizacion cuando RLS permita crear `Cotizacion`.
 - Persistir bitacora de correos enviados.

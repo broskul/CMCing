@@ -33,6 +33,7 @@ function verifyPassword(password, storedHash) {
 function getSessionSecret() {
   return process.env.APP_SESSION_SECRET
     || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     || process.env.MSGRAPH_CLIENT_SECRET;
 }
 

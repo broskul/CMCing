@@ -20,10 +20,10 @@ function buildPasswordHash(password) {
 
 function assertConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key || key.includes('...') || key.length < 80) {
-    throw new Error('Configura NEXT_PUBLIC_SUPABASE_URL y una SUPABASE_SERVICE_ROLE_KEY real antes de crear usuarios.');
+    throw new Error('Configura NEXT_PUBLIC_SUPABASE_URL y una SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY real antes de crear usuarios.');
   }
 
   return { url, key };

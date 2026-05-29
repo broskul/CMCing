@@ -36,6 +36,8 @@ Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizacio
 
 - Todas las APIs de negocio importan `app/lib/supabase-store.js`.
 - `supabase-store` conserva la forma de respuesta esperada por la UI y resuelve relaciones en servidor.
+- `supabase-store` tolera migraciones parciales para QA: tablas opcionales ausentes devuelven arreglos vacios y columnas nuevas faltantes se omiten al escribir.
+- Si RLS bloquea `VisitaEquipo`, la visita queda asociada por la columna legacy `Visita.equipoId`.
 - CRUD de maestros escribe en tablas reales de Supabase.
 - Cotizaciones escriben cabecera en `Cotizacion` e items en `CotizacionItem`.
 - Visitas con multiples equipos escriben `Visita` y sincronizan `VisitaEquipo`.
@@ -45,15 +47,17 @@ Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizacio
 ## Configuracion vigente
 
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` opcional para cliente futuro, no reemplaza service role en APIs server.
+- `SUPABASE_SERVICE_ROLE_KEY` recomendado para APIs server.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` se usa como fallback server-side cuando no existe service role y las politicas/tablas lo permiten.
 
-La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. Las llaves locales actuales deben reemplazarse por llaves reales del mismo proyecto antes de login, CRUD o bootstrap de usuarios.
+La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En esta etapa QA el proyecto tiene anon key real y tablas accesibles; si se activa RLS, hay que configurar politicas o agregar service role.
 
 ## Decisiones tecnicas vigentes
 
-- El servidor usa service role para evitar depender de politicas RLS durante esta etapa productiva inicial.
-- Si la service role esta ausente o parece placeholder, la app falla con error explicito.
+- El servidor prefiere service role para evitar depender de politicas RLS durante esta etapa productiva inicial.
+- Si no hay service role, usa anon key como fallback para permitir QA con tablas abiertas.
+- Si ambas llaves faltan o parecen placeholder, la app falla con error explicito.
+- La compatibilidad con migraciones parciales es temporal para QA; el objetivo productivo sigue siendo ejecutar todas las migraciones.
 - Offline se modela con cola local en cliente + `ColaSincronizacion` server-side.
 - `clientMutationId` es unico para evitar duplicar visitas al reintentar.
 - Adjuntos no se guardan en Postgres: solo metadata, bucket, key, URL y checksum.
@@ -61,7 +65,9 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. Las l
 
 ## Riesgos y bugs conocidos
 
-- Las pruebas E2E contra Supabase quedan bloqueadas hasta configurar service role real y ejecutar migraciones.
+- Las pruebas E2E dependen de que anon tenga permisos o de configurar service role real.
+- La DB actual esta parcialmente migrada: faltan `Usuario`, `ArchivoAdjunto`, `ColaSincronizacion` y algunas columnas nuevas de equipos/tecnicos.
+- QA 2026-05-29 con anon key: permite crear `Cliente`, `Vendedor`, `Tecnico`, `Servicio`, `Equipo` y `Visita`; bloquea por RLS inserts en `Actividad`, `Cotizacion`, `VisitaEquipo` y trigger de `EquipoHojaVida` al completar visitas.
 - Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
 - Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
 
