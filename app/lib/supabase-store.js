@@ -84,6 +84,7 @@ const ENTITY_CONFIG = {
       'costoManoObra',
       'costoRepuestos',
       'calendarEventId',
+      'clienteMutationId',
       'clientMutationId',
       'offlineEstado',
       'signedAt',
@@ -433,6 +434,7 @@ function formatVisita(visita, context) {
 
   return {
     ...visita,
+    clientMutationId: visita.clientMutationId || visita.clienteMutationId || null,
     equipoIds,
     equipoId: equipos[0]?.id || null,
     cliente: shortCliente(cliente),

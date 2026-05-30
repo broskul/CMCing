@@ -39,7 +39,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'clientMutationId requerido.' }, { status: 400 });
     }
 
-    const existing = (await listVisitas()).find((visita) => visita.clientMutationId === clientMutationId);
+    const existing = (await listVisitas())
+      .find((visita) => (visita.clientMutationId || visita.clienteMutationId) === clientMutationId);
     if (existing) {
       return NextResponse.json({ status: 'duplicate', visita: existing });
     }
@@ -107,6 +108,7 @@ export async function POST(request) {
       notasTecnicas: payload.descripcion || '',
       estado: 'completada',
       offlineEstado: 'SINCRONIZADO',
+      clienteMutationId: clientMutationId,
       clientMutationId,
       signedAt: payload.signedAt || new Date().toISOString(),
       fechaCierre: payload.signedAt || new Date().toISOString(),

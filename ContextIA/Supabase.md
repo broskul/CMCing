@@ -59,7 +59,7 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En es
 - Si ambas llaves faltan o parecen placeholder, la app falla con error explicito.
 - La compatibilidad con migraciones parciales es temporal para QA; el objetivo productivo sigue siendo ejecutar todas las migraciones.
 - Offline se modela con cola local en cliente + `ColaSincronizacion` server-side.
-- `clientMutationId` es unico para evitar duplicar visitas al reintentar.
+- El payload offline y `ColaSincronizacion` usan `clientMutationId`; la tabla `Visita` del proyecto actual usa la columna `clienteMutationId`. `supabase-store` acepta ambos nombres y normaliza la respuesta con alias `clientMutationId` para la app tecnica.
 - Adjuntos no se guardan en Postgres: solo metadata, bucket, key, URL y checksum.
 - `sku` no es unico porque puede representar familia/producto; `serial` y `codigoInterno` mantienen unicidad.
 
@@ -70,8 +70,9 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En es
 - QA 2026-05-29 con anon key: permite crear `Cliente`, `Vendedor`, `Tecnico`, `Servicio`, `Equipo` y `Visita`; bloquea por RLS inserts en `Actividad`, `Cotizacion`, `VisitaEquipo` y trigger de `EquipoHojaVida` al completar visitas.
 - QA 2026-05-29 con service role: ya permite crear `Actividad`, `Visita` completada, `VisitaEquipo` y hoja de vida; `CotizacionItem.lineaTotal` se omite en insert porque la DB lo calcula como columna generada.
 - QA 2026-05-29 con service role completo: creo cliente, vendedor, tecnico Cristian Manzor, servicio, actividad, equipo, visita completada y cotizacion `COT-2026-000003`; genero PDFs y envio correos.
+- QA 2026-05-29 offline/R2: creo datos frescos, cotizacion `COT-FIX-20260530000428`, visita `6`, subio 4 adjuntos a R2 (`evidencia_foto`, `evidencia_pdf`, `firma_tecnico`, `selfie_firma`), actualizo firma completa de Cristian Manzor y valido reintento idempotente con respuesta `duplicate`.
 - Login real ya funciona despues de ejecutar la migracion auth/offline y configurar `SUPABASE_SERVICE_ROLE_KEY`.
-- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
+- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local. Si `R2_PUBLIC_BASE_URL` no esta configurado, los adjuntos se guardan con URL `r2://...` y no renderizan como imagen publica en informes HTML/PDF.
 - Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
 
 ## Pendientes reales y proximos pasos
