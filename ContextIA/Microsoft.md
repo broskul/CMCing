@@ -33,8 +33,9 @@ Variables R2 relacionadas con adjuntos tecnicos, tambien en `.env.local`:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
-- `R2_PUBLIC_BASE_URL` opcional
 - `R2_REGION` opcional
+
+Los adjuntos tecnicos, selfies y firmas no usan URL publica. Si existe `R2_PUBLIC_BASE_URL` para otro uso futuro, no debe aplicarse a archivos sensibles.
 
 Tambien se aceptan los nombres actuales de Cloudflare:
 

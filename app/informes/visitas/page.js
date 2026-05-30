@@ -51,7 +51,15 @@ const getAssetUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('data:')) return url;
-  if (url.startsWith('r2://')) return '';
+  if (url.startsWith('r2://')) {
+    const key = url.replace(/^r2:\/\/[^/]+\//, '');
+    const path = `/api/r2/private?key=${encodeURIComponent(key)}`;
+    return typeof window === 'undefined' ? path : `${window.location.origin}${path}`;
+  }
+  if (url.startsWith('private/') || url.startsWith('firmas/') || url.startsWith('servicios/')) {
+    const path = `/api/r2/private?key=${encodeURIComponent(url)}`;
+    return typeof window === 'undefined' ? path : `${window.location.origin}${path}`;
+  }
   if (typeof window === 'undefined') return url;
   return `${window.location.origin}${url}`;
 };
@@ -304,9 +312,10 @@ const buildTechnicalVisitSection = (visita, index) => {
   const trabajos = visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.';
   const resultadoFinal = visita.notasTecnicas || `Estado de cierre: ${estadoLabels[visita.estado] || visita.estado || '-'}. Se deja registro técnico de visita para trazabilidad.`;
   const recomendaciones = 'Mantener plan de mantenimiento preventivo, validar calibración periódica y documentar cualquier desviación operativa.';
-  const firmaImagenUrl = visita.firmaTecnicoImagenUrl || visita.tecnico?.firmaImagenUrl || '';
+  const firmaImagenUrl = visita.firmaTecnicoImagenUrl || visita.tecnico?.firmaImagenUrl || visita.tecnico?.firmaImagenR2Key || '';
   const selfie = Array.isArray(visita.adjuntos) ? visita.adjuntos.find((adjunto) => adjunto.tipo === 'selfie_firma') : null;
-  const evidencias = Array.isArray(visita.adjuntos) ? visita.adjuntos.filter((adjunto) => adjunto.tipo === 'evidencia') : [];
+  const selfieUrl = selfie?.publicUrl || selfie?.r2Key || '';
+  const evidencias = Array.isArray(visita.adjuntos) ? visita.adjuntos.filter((adjunto) => String(adjunto.tipo || '').startsWith('evidencia')) : [];
 
   return `
     <section class="tech-page ${index > 0 ? 'page-break' : ''}">
@@ -379,7 +388,7 @@ const buildTechnicalVisitSection = (visita, index) => {
           ${escapeHtml(visita.firmaTecnicoTexto || visita.tecnico?.firmaTexto || visita.tecnico?.nombre || '-')}
         </div>
         <div class="signature-box">
-          ${selfie?.publicUrl ? `<img src="${escapeHtml(getAssetUrl(selfie.publicUrl))}" alt="Foto técnico" />` : ''}
+          ${selfieUrl ? `<img src="${escapeHtml(getAssetUrl(selfieUrl))}" alt="Foto técnico" />` : ''}
           Foto de validación al firmar
         </div>
       </div>

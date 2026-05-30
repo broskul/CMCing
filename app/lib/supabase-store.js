@@ -408,6 +408,7 @@ function shortTecnico(tecnico) {
     nombre: tecnico.nombre,
     firmaTexto: tecnico.firmaTexto,
     firmaImagenUrl: tecnico.firmaImagenUrl,
+    firmaImagenR2Key: tecnico.firmaImagenR2Key,
   } : null;
 }
 

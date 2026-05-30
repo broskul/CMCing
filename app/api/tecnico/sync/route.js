@@ -61,7 +61,7 @@ export async function POST(request) {
       firmaUpload = await uploadDataUrl({
         dataUrl: payload.firmaImagenDataUrl,
         filename: `firma-tecnico-${payload.tecnicoId || 'sin-tecnico'}.png`,
-        prefix: `firmas/tecnicos/${payload.tecnicoId || 'sin-tecnico'}`,
+        prefix: `private/firmas/tecnicos/${payload.tecnicoId || 'sin-tecnico'}`,
         tipo: 'firma',
       });
     }
@@ -70,7 +70,7 @@ export async function POST(request) {
       ? await uploadDataUrl({
         dataUrl: payload.selfieDataUrl,
         filename: `selfie-${clientMutationId}.jpg`,
-        prefix: `servicios/${clientMutationId}/selfie`,
+        prefix: `private/servicios/${clientMutationId}/selfie`,
         tipo: 'selfie_firma',
       })
       : null;
@@ -81,7 +81,7 @@ export async function POST(request) {
       const uploaded = await uploadDataUrl({
         dataUrl: attachment.dataUrl,
         filename: attachment.name,
-        prefix: `servicios/${clientMutationId}/evidencias`,
+        prefix: `private/servicios/${clientMutationId}/evidencias`,
         tipo: attachment.tipo || 'evidencia',
       });
       evidenceUploads.push({ source: attachment, uploaded });
@@ -90,7 +90,7 @@ export async function POST(request) {
     if (payload.tecnicoId && (payload.firmaTexto || firmaUpload)) {
       await updateEntity('tecnicos', payload.tecnicoId, {
         firmaTexto: payload.firmaTexto || '',
-        firmaImagenUrl: firmaUpload?.publicUrl || payload.firmaImagenUrl || '',
+        firmaImagenUrl: firmaUpload?.privateUrl || payload.firmaImagenUrl || '',
         firmaImagenR2Key: firmaUpload?.key || '',
         firmaUpdatedAt: new Date().toISOString(),
       });
@@ -113,7 +113,7 @@ export async function POST(request) {
       signedAt: payload.signedAt || new Date().toISOString(),
       fechaCierre: payload.signedAt || new Date().toISOString(),
       firmaTecnicoTexto: payload.firmaTexto || '',
-      firmaTecnicoImagenUrl: firmaUpload?.publicUrl || '',
+      firmaTecnicoImagenUrl: firmaUpload?.privateUrl || '',
     });
 
     const createdAttachments = [];
@@ -128,7 +128,7 @@ export async function POST(request) {
         sizeBytes: item.uploaded.sizeBytes,
         r2Bucket: item.uploaded.bucket,
         r2Key: item.uploaded.key,
-        publicUrl: item.uploaded.publicUrl,
+        publicUrl: null,
         checksumSha256: item.uploaded.checksumSha256,
         metadata: { clientMutationId },
       }));
@@ -145,7 +145,7 @@ export async function POST(request) {
         sizeBytes: firmaUpload.sizeBytes,
         r2Bucket: firmaUpload.bucket,
         r2Key: firmaUpload.key,
-        publicUrl: firmaUpload.publicUrl,
+        publicUrl: null,
         checksumSha256: firmaUpload.checksumSha256,
         metadata: { clientMutationId },
       }));
@@ -162,7 +162,7 @@ export async function POST(request) {
         sizeBytes: selfieUpload.sizeBytes,
         r2Bucket: selfieUpload.bucket,
         r2Key: selfieUpload.key,
-        publicUrl: selfieUpload.publicUrl,
+        publicUrl: null,
         checksumSha256: selfieUpload.checksumSha256,
         metadata: { clientMutationId },
       });

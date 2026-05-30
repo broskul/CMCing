@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 let cachedClient = null;
 
@@ -74,6 +74,29 @@ export function buildR2Key({ prefix = 'servicios', filename = 'adjunto.bin', ext
   return `${prefix}/${stamp}-${random}-${cleanFilename}${suffix}`;
 }
 
+export function buildPrivateR2Url({ bucket, key }) {
+  return `r2://${bucket}/${key}`;
+}
+
+export function parsePrivateR2Url(value) {
+  const match = String(value || '').match(/^r2:\/\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return { bucket: match[1], key: match[2] };
+}
+
+async function bodyToBuffer(body) {
+  if (!body) return Buffer.alloc(0);
+  if (typeof body.transformToByteArray === 'function') {
+    return Buffer.from(await body.transformToByteArray());
+  }
+
+  const chunks = [];
+  for await (const chunk of body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function uploadBufferToR2({ buffer, key, contentType }) {
   const config = getR2Config();
   assertR2Config(config);
@@ -91,12 +114,28 @@ export async function uploadBufferToR2({ buffer, key, contentType }) {
     },
   }));
 
-  const baseUrl = config.publicBaseUrl ? config.publicBaseUrl.replace(/\/$/, '') : '';
-
   return {
     bucket: config.bucket,
     key,
     checksumSha256,
-    publicUrl: baseUrl ? `${baseUrl}/${key}` : `r2://${config.bucket}/${key}`,
+    privateUrl: buildPrivateR2Url({ bucket: config.bucket, key }),
+    publicUrl: null,
+  };
+}
+
+export async function getObjectFromR2({ key }) {
+  const config = getR2Config();
+  assertR2Config(config);
+
+  const result = await getClient(config).send(new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+  }));
+
+  return {
+    buffer: await bodyToBuffer(result.Body),
+    contentType: result.ContentType || 'application/octet-stream',
+    contentLength: result.ContentLength,
+    etag: result.ETag,
   };
 }

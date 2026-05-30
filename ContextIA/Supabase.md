@@ -42,7 +42,8 @@ Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizacio
 - Cotizaciones escriben cabecera en `Cotizacion` e items en `CotizacionItem`.
 - Visitas con multiples equipos escriben `Visita` y sincronizan `VisitaEquipo`.
 - La app tecnica mantiene cola local IndexedDB y al volver conexion llama `/api/tecnico/sync`.
-- `/api/tecnico/sync` crea `ColaSincronizacion`, sube adjuntos a R2, crea `ArchivoAdjunto`, actualiza firma del tecnico y marca la visita sincronizada.
+- `/api/tecnico/sync` crea `ColaSincronizacion`, sube adjuntos privados a R2, crea `ArchivoAdjunto`, actualiza firma del tecnico y marca la visita sincronizada.
+- `/api/r2/private` entrega objetos R2 solo dentro de sesion autenticada cuando la UI necesita renderizar firma/selfie/evidencias en informes.
 
 ## Configuracion vigente
 
@@ -60,7 +61,8 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En es
 - La compatibilidad con migraciones parciales es temporal para QA; el objetivo productivo sigue siendo ejecutar todas las migraciones.
 - Offline se modela con cola local en cliente + `ColaSincronizacion` server-side.
 - El payload offline y `ColaSincronizacion` usan `clientMutationId`; la tabla `Visita` del proyecto actual usa la columna `clienteMutationId`. `supabase-store` acepta ambos nombres y normaliza la respuesta con alias `clientMutationId` para la app tecnica.
-- Adjuntos no se guardan en Postgres: solo metadata, bucket, key, URL y checksum.
+- Adjuntos no se guardan en Postgres: solo metadata, bucket, key y checksum. `publicUrl` queda nulo para adjuntos privados; si se necesita render en UI se usa `/api/r2/private`.
+- Firmas de tecnicos se guardan separadas bajo `private/firmas/tecnicos/{tecnicoId}`; evidencias y selfies quedan bajo `private/servicios/{clientMutationId}`.
 - `sku` no es unico porque puede representar familia/producto; `serial` y `codigoInterno` mantienen unicidad.
 
 ## Riesgos y bugs conocidos
@@ -71,8 +73,10 @@ La URL local quedo apuntando a `https://akmcfooalqgzeeiaoihu.supabase.co`. En es
 - QA 2026-05-29 con service role: ya permite crear `Actividad`, `Visita` completada, `VisitaEquipo` y hoja de vida; `CotizacionItem.lineaTotal` se omite en insert porque la DB lo calcula como columna generada.
 - QA 2026-05-29 con service role completo: creo cliente, vendedor, tecnico Cristian Manzor, servicio, actividad, equipo, visita completada y cotizacion `COT-2026-000003`; genero PDFs y envio correos.
 - QA 2026-05-29 offline/R2: creo datos frescos, cotizacion `COT-FIX-20260530000428`, visita `6`, subio 4 adjuntos a R2 (`evidencia_foto`, `evidencia_pdf`, `firma_tecnico`, `selfie_firma`), actualizo firma completa de Cristian Manzor y valido reintento idempotente con respuesta `duplicate`.
+- Decision posterior 2026-05-29: adjuntos, selfies y firmas deben ser privados. El codigo ya no genera URL publica aunque exista `R2_PUBLIC_BASE_URL`; guarda referencias `r2://...` o `r2Key` y renderiza solo via endpoint autenticado.
+- QA privacidad R2 2026-05-29: visita `7` sincronizada con `selfieAdjuntoId`, 4 adjuntos con `publicUrl = null`, prefijos `private/`, endpoint privado `200` con sesion y `401` sin sesion. Se limpiaron 8 `publicUrl` heredadas en `ArchivoAdjunto`.
 - Login real ya funciona despues de ejecutar la migracion auth/offline y configurar `SUPABASE_SERVICE_ROLE_KEY`.
-- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local. Si `R2_PUBLIC_BASE_URL` no esta configurado, los adjuntos se guardan con URL `r2://...` y no renderizan como imagen publica en informes HTML/PDF.
+- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
 - Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
 
 ## Pendientes reales y proximos pasos

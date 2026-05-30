@@ -49,12 +49,13 @@ Emitir documentos comerciales y tecnicos con branding CMCing:
   - secciones con encabezado gris,
   - footer CMCing.
 - Firma del tecnico se compone de texto e imagen.
-- Selfie capturada al firmar se adjunta al servicio y puede aparecer en informe si tiene URL publica.
+- Selfie capturada al firmar se adjunta al servicio y puede aparecer en informe mediante endpoint autenticado; no se usa URL publica para firma/selfie/evidencias.
+- Las imagenes privadas de R2 se resuelven en UI por `/api/r2/private`, usando `r2Key` o URL interna `r2://...`.
 - Los correos usan HTML con branding y PDF adjunto.
 
 ## Riesgos y bugs conocidos
 
-- Si R2 no expone URL publica, imagenes de firma/selfie quedan registradas pero no renderizan en PDF HTML.
+- Si el usuario no tiene sesion valida, imagenes privadas de firma/selfie no renderizan en PDF HTML.
 - `html2pdf.js` puede variar saltos de pagina segun navegador.
 - PDFs historicos tienen detalles finos que aun no estan replicados al 100%.
 - Si Supabase no tiene datos o migraciones, los informes se generan vacios o fallan por tabla faltante.
