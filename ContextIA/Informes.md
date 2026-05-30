@@ -62,6 +62,7 @@ Emitir documentos comerciales y tecnicos con branding CMCing:
 - QA 2026-05-29 genero PDFs de visitas/facturacion y envio ambos informes por MS Graph a `carlos@prof3sional.com`.
 - QA 2026-05-29 con service role genero PDF de cotizacion `COT-2026-000003` y envio la cotizacion por MS Graph a `carlos@prof3sional.com`.
 - QA 2026-05-29 offline/R2 genero PDF de cotizacion `COT-FIX-20260530000428` y PDF de informe de visitas para la visita `6`; la API de informes incluye 4 adjuntos de la visita sincronizada.
+- Ajuste 2026-05-29: PDF de cotizacion usa espaciado vertical mas compacto entre datos de cliente, tabla de items, separador de totales y observaciones para evitar grandes blancos con pocos items.
 - Las rutas dinamicas `[id]` deben esperar `params` en Next 16; se corrigio para CRUD/PDF/email de recursos por id.
 
 ## Pendientes reales y proximos pasos

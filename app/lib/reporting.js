@@ -255,14 +255,14 @@ async function createCotizacionPdf(cotizacion) {
     subtitle: `Emitida: ${formatDate(cotizacion.fecha || new Date())}`,
   });
 
-  let y = 680;
+  let y = 710;
   const cliente = cotizacion.cliente?.nombre || '-';
   const vendedor = cotizacion.vendedor?.nombre || '-';
 
   page.drawText(`Cliente: ${cliente}`, { x: 30, y, size: 11, font: fonts.fontBold, color: rgb(0.1, 0.14, 0.2) });
-  y -= 18;
+  y -= 16;
   page.drawText(`Vendedor: ${vendedor}`, { x: 30, y, size: 10, font: fonts.fontRegular, color: rgb(0.25, 0.28, 0.34) });
-  y -= 18;
+  y -= 16;
   page.drawText(`Estado: ${cotizacion.estado || '-'} | Válida hasta: ${cotizacion.validaHasta ? new Date(cotizacion.validaHasta).toLocaleDateString('es-CL') : '-'}`, {
     x: 30,
     y,
@@ -271,13 +271,13 @@ async function createCotizacionPdf(cotizacion) {
     color: rgb(0.25, 0.28, 0.34),
   });
 
-  y -= 30;
-  page.drawRectangle({ x: 30, y: y - 22, width: 535, height: 22, color: rgb(0.94, 0.96, 0.99) });
-  page.drawText('Descripción', { x: 40, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Cant.', { x: 340, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Unitario', { x: 395, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Total', { x: 495, y: y - 15, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  y -= 28;
+  y -= 24;
+  page.drawRectangle({ x: 30, y: y - 20, width: 535, height: 20, color: rgb(0.94, 0.96, 0.99) });
+  page.drawText('Descripción', { x: 40, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Cant.', { x: 340, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Unitario', { x: 395, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Total', { x: 495, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  y -= 24;
 
   for (const item of cotizacion.items || []) {
     if (y < 150) break;
@@ -285,21 +285,23 @@ async function createCotizacionPdf(cotizacion) {
     page.drawText(String(item.cantidad || 0), { x: 345, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
     page.drawText(money(item.precioUnitario), { x: 395, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
     page.drawText(money(item.lineaTotal), { x: 495, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-    y -= 18;
+    y -= 12;
   }
 
-  y -= 16;
+  y -= 4;
   page.drawLine({ start: { x: 360, y }, end: { x: 565, y }, thickness: 1, color: rgb(0.85, 0.87, 0.91) });
-  y -= 18;
+  y -= 14;
   page.drawText(`Subtotal: ${money(cotizacion.subtotal)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-  y -= 16;
+  y -= 14;
   page.drawText(`IVA: ${money(cotizacion.impuestoMonto)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-  y -= 20;
+  y -= 18;
   page.drawText(`Total: ${money(cotizacion.total)}`, { x: 395, y, size: 12, font: fonts.fontBold, color: rgb(0.1, 0.14, 0.2) });
 
   if (cotizacion.observaciones) {
-    page.drawText('Observaciones:', { x: 30, y: 130, size: 10, font: fonts.fontBold, color: rgb(0.15, 0.18, 0.25) });
-    page.drawText(String(cotizacion.observaciones).slice(0, 110), { x: 30, y: 114, size: 9, font: fonts.fontRegular, color: rgb(0.25, 0.28, 0.34) });
+    y -= 30;
+    page.drawText('Observaciones:', { x: 30, y, size: 10, font: fonts.fontBold, color: rgb(0.15, 0.18, 0.25) });
+    y -= 14;
+    page.drawText(String(cotizacion.observaciones).slice(0, 110), { x: 30, y, size: 9, font: fonts.fontRegular, color: rgb(0.25, 0.28, 0.34) });
   }
 
   return Buffer.from(await pdfDoc.save());
