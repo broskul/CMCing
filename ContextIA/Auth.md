@@ -2,7 +2,7 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-05-29.
+Ultima actualizacion: 2026-06-05.
 La autenticacion directa usa usuarios reales en Supabase. Ya no existen credenciales locales ni usuarios bootstrap embebidos en runtime. Login real validado contra `Usuario`.
 
 ## Objetivo del modulo
@@ -25,8 +25,8 @@ Permitir acceso controlado con usuario y contrasena sin depender de Microsoft/En
 
 ## Flujo funcional real
 
-1. Usuario ingresa en `/login` con email y contrasena.
-2. Backend busca el email en `Usuario` usando Supabase server-side.
+1. Usuario ingresa en `/login` con identificador y contrasena. El campo visual se llama `Usuario` y acepta tanto correos como identificadores cortos de prueba.
+2. Backend busca ese identificador en `Usuario.email` usando Supabase server-side.
 3. Backend valida `passwordHash` con formato `scrypt:salt:hash`.
 4. Se crea cookie HTTP-only `cmcing_session`.
 5. La cookie contiene una sesion stateless firmada con HMAC y expiracion de 12 horas.
@@ -52,6 +52,12 @@ Para crear o actualizar un usuario real:
 npm run create:user -- --email correo@dominio.cl --password "clave-segura" --name "Nombre Usuario" --role ADMIN
 ```
 
+Para una cuenta de prueba con identificador corto:
+
+```bash
+npm run create:user -- --email admin --password "admin123" --name "Admin Pruebas" --role ADMIN
+```
+
 Para una cuenta tecnica asociada:
 
 ```bash
@@ -61,6 +67,7 @@ npm run create:user -- --email tecnico@dominio.cl --password "clave-segura" --na
 ## Decisiones tecnicas vigentes
 
 - Auth directa por usuario/contrasena, no SSO.
+- `Usuario.email` sigue siendo el campo persistido para el login, aunque el frontend no exige formato email para permitir usuarios cortos controlados.
 - Passwords se comparan con hash `scrypt` y `timingSafeEqual`.
 - No se aceptan credenciales por defecto en produccion.
 - `Usuario.tecnicoId` vincula cuentas tecnicas con el maestro `Tecnico`.

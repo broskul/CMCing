@@ -48,7 +48,7 @@ function LoginForm() {
       <label className="block text-[0.86rem] font-medium text-neutral-700">
         Usuario
         <input
-          type="email"
+          type="text"
           value={form.email}
           onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
           className="input-base mt-1"
