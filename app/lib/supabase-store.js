@@ -713,15 +713,43 @@ export async function listEquipos() {
 
   return equipos.map((equipo) => {
     const visitasEquipo = visitas.filter((visita) => getVisitaEquipoIds(visita, visitaEquipos).includes(equipo.id));
+    const visitasEquipoResumen = visitasEquipo.map((visita) => {
+      const tecnico = tecnicosById.get(visita.tecnicoId);
+      const servicio = serviciosById.get(visita.servicioId);
+      const cliente = clientesById.get(visita.clienteId);
+
+      return {
+        id: visita.id,
+        codigo: visita.codigo,
+        clienteId: visita.clienteId,
+        equipoId: equipo.id,
+        tecnicoId: visita.tecnicoId,
+        servicioId: visita.servicioId,
+        fecha: visita.fecha,
+        fechaCierre: visita.fechaCierre,
+        descripcion: visita.descripcion,
+        notasTecnicas: visita.notasTecnicas,
+        estado: visita.estado,
+        tipoVisita: visita.tipoVisita,
+        prioridad: visita.prioridad,
+        cliente: shortCliente(cliente),
+        tecnico: shortTecnico(tecnico),
+        servicio: shortServicio(servicio),
+      };
+    });
     const hojaVidaDb = hojaVida.filter((evento) => evento.equipoId === equipo.id);
     const hojaVidaBase = hojaVidaDb.length
       ? hojaVidaDb.map((evento) => {
         const tecnico = evento.tecnicoId ? tecnicosById.get(evento.tecnicoId) : null;
         const visita = evento.visitaId ? visitas.find((item) => item.id === evento.visitaId) : null;
+        const servicio = visita?.servicioId ? serviciosById.get(visita.servicioId) : null;
 
         return {
           ...evento,
           tecnico: tecnico?.nombre || '-',
+          tecnicoDetalle: shortTecnico(tecnico),
+          visitaId: visita?.id || evento.visitaId || null,
+          servicio: shortServicio(servicio),
           estado: visita?.estado || '',
         };
       })
@@ -736,14 +764,44 @@ export async function listEquipos() {
           titulo: servicio?.descripcion || 'Servicio técnico',
           detalle: visita.notasTecnicas || visita.descripcion || '',
           tecnico: tecnico?.nombre || '-',
+          tecnicoDetalle: shortTecnico(tecnico),
+          visitaId: visita.id,
+          servicio: shortServicio(servicio),
           estado: visita.estado,
         };
       });
+    const serviciosRelacionados = Object.values(visitasEquipoResumen.reduce((acc, visita) => {
+      const key = visita.servicio?.id || visita.servicioId || `sin-servicio-${visita.id}`;
+      if (!acc[key]) {
+        acc[key] = {
+          id: visita.servicio?.id || visita.servicioId || null,
+          descripcion: visita.servicio?.descripcion || 'Servicio sin nombre',
+          tipo: visita.servicio?.tipo || '',
+          precio: visita.servicio?.precio || 0,
+          visitas: [],
+          tecnicos: [],
+          ultimaFecha: null,
+        };
+      }
+
+      acc[key].visitas.push(visita);
+      if (visita.tecnico && !acc[key].tecnicos.some((item) => item.id === visita.tecnico.id)) {
+        acc[key].tecnicos.push(visita.tecnico);
+      }
+
+      const candidateDate = visita.fechaCierre || visita.fecha;
+      if (!acc[key].ultimaFecha || new Date(candidateDate).getTime() > new Date(acc[key].ultimaFecha).getTime()) {
+        acc[key].ultimaFecha = candidateDate;
+      }
+
+      return acc;
+    }, {})).sort((a, b) => new Date(b.ultimaFecha || 0).getTime() - new Date(a.ultimaFecha || 0).getTime());
 
     return {
       ...equipo,
       cliente: shortCliente(clientesById.get(equipo.clienteId)),
-      visitas: visitasEquipo.map((visita) => ({ id: visita.id, fecha: visita.fecha, descripcion: visita.descripcion, estado: visita.estado })),
+      visitas: visitasEquipoResumen,
+      serviciosRelacionados,
       hojaVida: hojaVidaBase.sort((a, b) => new Date(b.fechaEvento).getTime() - new Date(a.fechaEvento).getTime()),
     };
   });

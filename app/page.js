@@ -7,7 +7,7 @@ const quickActions = [
   { href: '/admin?modulo=clientes', label: 'Clientes' },
   { href: '/cotizaciones', label: 'Cotizaciones' },
   { href: '/equipos', label: 'Equipos' },
-  { href: '/nueva-visita', label: 'Nueva visita' },
+  { href: '/admin?modulo=visitas&nuevo=1', label: 'Nueva visita' },
   { href: '/tecnico', label: 'App técnico' },
 ];
 

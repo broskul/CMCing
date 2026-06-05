@@ -31,7 +31,8 @@ Aplicación web para gestionar visitas y servicios técnicos de equipos médicos
 
 - Dashboard: http://localhost:3000
 - Backoffice: http://localhost:3000/admin
-- Nueva Visita: http://localhost:3000/nueva-visita
+- Equipos: http://localhost:3000/equipos
+- Nueva Visita: http://localhost:3000/admin?modulo=visitas&nuevo=1
 
 ## Estructura de la Base de Datos
 

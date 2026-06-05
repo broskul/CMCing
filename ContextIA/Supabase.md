@@ -2,7 +2,7 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-05-29.
+Ultima actualizacion: 2026-06-02.
 El runtime de la app opera directo contra Supabase usando `@supabase/supabase-js`. La capa en memoria fue retirada del runtime y `app/lib/demo-store.js` fue eliminado.
 
 ## Objetivo del modulo
@@ -36,6 +36,7 @@ Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizacio
 
 - Todas las APIs de negocio importan `app/lib/supabase-store.js`.
 - `supabase-store` conserva la forma de respuesta esperada por la UI y resuelve relaciones en servidor.
+- `listEquipos()` entrega cada equipo con cliente, visitas enriquecidas con servicio/tecnico/cliente, servicios relacionados agrupados y hoja de vida con referencias navegables para la vista 360.
 - `supabase-store` tolera migraciones parciales para QA: tablas opcionales ausentes devuelven arreglos vacios y columnas nuevas faltantes se omiten al escribir.
 - Si RLS bloquea `VisitaEquipo`, la visita queda asociada por la columna legacy `Visita.equipoId`.
 - CRUD de maestros escribe en tablas reales de Supabase.

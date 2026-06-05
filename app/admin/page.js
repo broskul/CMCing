@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, useEffect, useCallback } from 'react';
 
 const fieldConfigs = {
@@ -15,7 +15,6 @@ const fieldConfigs = {
 
 const tabs = [
   { key: 'clientes', label: 'Clientes', api: '/api/clientes' },
-  { key: 'equipos', label: 'Equipos', api: '/api/equipos' },
   { key: 'servicios', label: 'Servicios', api: '/api/servicios' },
   { key: 'actividades', label: 'Actividades', api: '/api/actividades' },
   { key: 'vendedores', label: 'Vendedores', api: '/api/vendedores' },
@@ -31,6 +30,16 @@ const createLabels = {
   vendedores: 'Nuevo vendedor',
   tecnicos: 'Nuevo técnico',
   visitas: 'Nueva visita',
+};
+
+const entityLabels = {
+  clientes: 'cliente',
+  equipos: 'equipo',
+  servicios: 'servicio',
+  actividades: 'actividad',
+  vendedores: 'vendedor',
+  tecnicos: 'técnico',
+  visitas: 'visita',
 };
 
 const relationKeysById = {
@@ -107,7 +116,9 @@ const formatFriendlyDate = (value) => {
 
 function AdminContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const requestedTab = searchParams.get('modulo');
+  const openNewFromUrl = searchParams.get('nuevo') === '1';
   const activeTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : 'clientes';
   const activeTabConfig = tabs.find((tab) => tab.key === activeTab) || tabs[0];
   const [data, setData] = useState([]);
@@ -159,6 +170,22 @@ function AdminContent() {
     fetchData();
     fetchOptions();
   }, [fetchData, fetchOptions]);
+
+  useEffect(() => {
+    if (requestedTab === 'equipos') {
+      router.replace('/equipos');
+    }
+  }, [requestedTab, router]);
+
+  useEffect(() => {
+    if (activeTab !== 'visitas' || !openNewFromUrl) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFormData({});
+    setIsEditing(false);
+    setShowModal(true);
+    router.replace('/admin?modulo=visitas');
+  }, [activeTab, openNewFromUrl, router]);
 
   const openCreateModal = () => {
     setFormData({});
@@ -419,7 +446,7 @@ function AdminContent() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
           <div className="w-full max-w-md max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-5 shadow-2xl sm:p-8">
-            <h3 className="mb-4 text-[1.25rem] font-semibold text-neutral-900">{isEditing ? 'Editar' : 'Crear'} {activeTabConfig.label}</h3>
+            <h3 className="mb-4 text-[1.25rem] font-semibold text-neutral-900">{isEditing ? `Editar ${entityLabels[activeTab] || 'registro'}` : (createLabels[activeTab] || 'Nuevo registro')}</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               {fieldConfigs[activeTab].map(field => {
                 const fieldType = getFieldType(field);

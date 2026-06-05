@@ -2,7 +2,7 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-05-29.
+Ultima actualizacion: 2026-06-02.
 El modo demo fue retirado del runtime. La aplicacion queda en modo produccion, con APIs conectadas directo a Supabase.
 
 ## Objetivo del modulo
@@ -31,7 +31,8 @@ Registrar la decision de no volver a depender de datos en memoria para flujos op
 - Sidebar izquierda organiza los modulos comerciales, operativos, personas e informes.
 - CRUD maestro sigue disponible en `/admin?modulo=...`, con persistencia real.
 - Cotizaciones permiten crear, exportar PDF y enviar por MS Graph.
-- Equipos permite buscar por SKU, serial, nombre y revisar hoja de vida.
+- Equipos es la pantalla unica para el maestro de equipos: permite buscar por SKU, serial, nombre y cliente, crear, editar, eliminar, revisar imagen, servicios relacionados y hoja de vida.
+- La pantalla `/equipos` opera como vista 360: desde equipo se puede abrir detalle de cliente, servicio, tecnico y visita relacionada; al abrir un equipo relacionado se cambia la ficha activa.
 - Calendario lista visitas agrupadas por dia.
 - App tecnica `/tecnico` guarda servicios en IndexedDB si no hay senal.
 - Al volver la conexion, la cola intenta sincronizar contra `/api/tecnico/sync`.
@@ -48,6 +49,8 @@ Registrar la decision de no volver a depender de datos en memoria para flujos op
 - Service worker cachea recursos GET visitados para mejorar uso offline despues de la primera carga, pero los assets `/_next/` y las APIs `/api/*` se resuelven network-first para evitar CSS/JS o datos obsoletos despues de cambios de UI/backend.
 - `app/offline-register.js` fuerza `registration.update()` y recarga al cambiar el controller para activar rapido nuevas versiones de cache.
 - Breakpoints vigentes: sidebar fijo en escritorio, drawer off-canvas bajo 900px, tablas de maestros convertidas a fichas bajo 760px, paddings reducidos bajo 720px/520px y tablas secundarias con scroll horizontal controlado.
+- Equipos no vive en `/admin?modulo=equipos` porque requiere lectura visual y relaciones operativas; la URL antigua redirige a `/equipos`.
+- `Nueva visita` no vive como item independiente del sidebar; `/nueva-visita` redirige a `/admin?modulo=visitas&nuevo=1` para abrir el alta dentro de Visitas.
 
 ## Riesgos y bugs conocidos
 

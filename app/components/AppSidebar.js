@@ -24,11 +24,9 @@ const navigationGroups = [
     title: 'Operación',
     items: [
       { label: 'Equipos', href: '/equipos' },
-      { label: 'Maestro equipos', href: '/admin?modulo=equipos' },
       { label: 'Servicios', href: '/admin?modulo=servicios' },
       { label: 'Actividades', href: '/admin?modulo=actividades' },
       { label: 'Visitas', href: '/admin?modulo=visitas' },
-      { label: 'Nueva visita', href: '/nueva-visita' },
       { label: 'Calendario', href: '/calendario' },
     ],
   },
