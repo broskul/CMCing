@@ -28,12 +28,59 @@ async function uploadDataUrl({ dataUrl, filename, prefix, tipo }) {
   };
 }
 
+function buildTechnicalReportData(payload) {
+  const mediciones = Array.isArray(payload.mediciones)
+    ? payload.mediciones
+      .filter((measurement) => ['variable', 'programado', 'observado', 'diferencia', 'criterio']
+        .some((field) => String(measurement?.[field] || '').trim()))
+      .map((measurement) => ({
+        variable: String(measurement.variable || '').trim(),
+        unidad: String(measurement.unidad || '').trim(),
+        programado: String(measurement.programado || '').trim(),
+        observado: String(measurement.observado || '').trim(),
+        referencia: String(measurement.referencia || '').trim(),
+        diferenciaModo: String(measurement.diferenciaModo || '').trim(),
+        diferencia: String(measurement.diferencia || '').trim(),
+        criterioModo: String(measurement.criterioModo || '').trim(),
+        criterioUnidad: String(measurement.criterioUnidad || '').trim(),
+        criterioMenos: String(measurement.criterioMenos || '').trim(),
+        criterioMas: String(measurement.criterioMas || '').trim(),
+        criterioMin: String(measurement.criterioMin || '').trim(),
+        criterioMax: String(measurement.criterioMax || '').trim(),
+        cumple: String(measurement.cumple || '').trim() || 'Si',
+        criterio: String(measurement.criterio || '').trim(),
+      }))
+    : [];
+
+  const checklist = Array.isArray(payload.checklist)
+    ? payload.checklist.map((item) => ({
+      label: String(item.label || '').trim(),
+      checked: Boolean(item.checked),
+    })).filter((item) => item.label)
+    : [];
+
+  return {
+    schema: 'cmcing_technical_report',
+    version: 2,
+    objetivo: String(payload.objetivo || '').trim(),
+    especificaciones: String(payload.especificaciones || '').trim(),
+    trabajoRealizado: String(payload.trabajoRealizado || payload.descripcion || '').trim(),
+    checklist,
+    mediciones,
+    certificadoInstrumentos: String(payload.certificadoInstrumentos || '').trim(),
+    codigoInstrumento: String(payload.codigoInstrumento || '').trim(),
+    codigoServicio: String(payload.codigoServicio || '').trim(),
+    atencion: String(payload.atencion || '').trim(),
+  };
+}
+
 export async function POST(request) {
   let syncJob = null;
 
   try {
     const payload = await request.json();
     const clientMutationId = payload.clientMutationId;
+    const technicalReport = buildTechnicalReportData(payload);
 
     if (!clientMutationId) {
       return NextResponse.json({ error: 'clientMutationId requerido.' }, { status: 400 });
@@ -78,11 +125,12 @@ export async function POST(request) {
     const evidenceUploads = [];
     for (const attachment of payload.attachments || []) {
       if (!attachment.dataUrl) continue;
+      const attachmentType = attachment.tipo || 'evidencia';
       const uploaded = await uploadDataUrl({
         dataUrl: attachment.dataUrl,
         filename: attachment.name,
-        prefix: `private/servicios/${clientMutationId}/evidencias`,
-        tipo: attachment.tipo || 'evidencia',
+        prefix: `private/servicios/${clientMutationId}/${attachmentType === 'certificado_instrumento' ? 'certificados' : attachmentType === 'imagen_adjunta' ? 'imagenes' : 'evidencias'}`,
+        tipo: attachmentType,
       });
       evidenceUploads.push({ source: attachment, uploaded });
     }
@@ -97,6 +145,7 @@ export async function POST(request) {
     }
 
     const visita = await createEntity('visitas', {
+      codigo: technicalReport.codigoServicio || null,
       clienteId: Number(payload.clienteId),
       equipoIds: (payload.equipoIds || []).map((id) => Number(id)),
       equipoId: payload.equipoIds?.length ? Number(payload.equipoIds[0]) : null,
@@ -104,8 +153,8 @@ export async function POST(request) {
       vendedorId: payload.vendedorId ? Number(payload.vendedorId) : null,
       servicioId: Number(payload.servicioId),
       fecha: payload.fecha || new Date().toISOString(),
-      descripcion: payload.descripcion || '',
-      notasTecnicas: payload.descripcion || '',
+      descripcion: technicalReport.trabajoRealizado,
+      notasTecnicas: JSON.stringify(technicalReport),
       estado: 'completada',
       offlineEstado: 'SINCRONIZADO',
       clienteMutationId: clientMutationId,
@@ -130,7 +179,11 @@ export async function POST(request) {
         r2Key: item.uploaded.key,
         publicUrl: null,
         checksumSha256: item.uploaded.checksumSha256,
-        metadata: { clientMutationId },
+        metadata: {
+          clientMutationId,
+          titulo: item.source.titulo || '',
+          descripcion: item.source.descripcion || '',
+        },
       }));
     }
 

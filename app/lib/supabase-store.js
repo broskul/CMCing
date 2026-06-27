@@ -386,13 +386,20 @@ function mapById(rows) {
 }
 
 function shortCliente(cliente) {
-  return cliente ? { id: cliente.id, nombre: cliente.nombre, email: cliente.email } : null;
+  return cliente ? {
+    id: cliente.id,
+    nombre: cliente.nombre,
+    email: cliente.email,
+    telefono: cliente.telefono,
+    direccion: cliente.direccion,
+  } : null;
 }
 
 function shortEquipo(equipo) {
   return equipo ? {
     id: equipo.id,
     sku: equipo.sku,
+    codigoInterno: equipo.codigoInterno,
     nombre: equipo.nombre,
     serial: equipo.serial,
     modelo: equipo.modelo,

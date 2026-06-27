@@ -64,6 +64,113 @@ const getAssetUrl = (url) => {
   return `${window.location.origin}${url}`;
 };
 
+const defaultChecklistLabels = [
+  'Chequeo primario de funcionamiento',
+  'Chequeo estructural, accesorios y componentes',
+  'Chequeo de controles y comandos',
+  'Chequeo de conexiones eléctricas',
+];
+
+const defaultObjective = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica.';
+const defaultSpecifications = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos son los mismos para el proceso.';
+
+const splitLines = (value) => String(value || '')
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter(Boolean);
+
+const renderLines = (value, empty = '-') => {
+  const lines = splitLines(value);
+  if (!lines.length) return escapeHtml(empty);
+  return lines.map((line) => `▪ ${escapeHtml(line)}`).join('<br/>');
+};
+
+const getAttachmentMetadata = (adjunto) => {
+  if (!adjunto?.metadata) return {};
+  if (typeof adjunto.metadata === 'object') return adjunto.metadata;
+  try {
+    return JSON.parse(adjunto.metadata);
+  } catch {
+    return {};
+  }
+};
+
+const isReportImageAttachment = (adjunto) => {
+  const type = String(adjunto?.tipo || '');
+  const mimeType = String(adjunto?.mimeType || '');
+  return ['imagen_adjunta', 'evidencia'].includes(type) && mimeType.startsWith('image/');
+};
+
+const buildServiceCode = (visita) => {
+  const fecha = visita.fecha ? new Date(visita.fecha) : new Date();
+  const year = Number.isNaN(fecha.getTime()) ? new Date().getFullYear() : fecha.getFullYear();
+  return visita.codigo || `IT_${year} ${String(visita.id || 0).padStart(4, '0')}`;
+};
+
+const capitalizeMonth = (value) => String(value || '').replace(
+  /de ([a-záéíóúñ]+) de/i,
+  (_, month) => `de ${month.charAt(0).toUpperCase()}${month.slice(1)} de`
+);
+
+const formatTechnicalDate = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  return capitalizeMonth(date.toLocaleDateString('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }));
+};
+
+const getReportCity = (visita) => {
+  const direccion = String(visita.cliente?.direccion || '');
+  if (/puerto\s+varas/i.test(direccion)) return 'Puerto Varas';
+  if (/santiago/i.test(direccion)) return 'Santiago';
+  return 'Santiago';
+};
+
+const parseTechnicalReportData = (visita) => {
+  try {
+    const parsed = JSON.parse(visita.notasTecnicas || '');
+    if (parsed?.schema === 'cmcing_technical_report') {
+      return {
+        objetivo: parsed.objetivo || defaultObjective,
+        especificaciones: parsed.especificaciones || defaultSpecifications,
+        trabajoRealizado: parsed.trabajoRealizado || visita.descripcion || '',
+        checklist: Array.isArray(parsed.checklist) && parsed.checklist.length
+          ? parsed.checklist
+          : defaultChecklistLabels.map((label) => ({ label, checked: true })),
+        mediciones: Array.isArray(parsed.mediciones) ? parsed.mediciones : [],
+        certificadoInstrumentos: parsed.certificadoInstrumentos || '',
+        codigoInstrumento: parsed.codigoInstrumento || '',
+        codigoServicio: parsed.codigoServicio || visita.codigo || '',
+        atencion: parsed.atencion || '',
+      };
+    }
+  } catch {
+    // Visitas antiguas guardaban notas técnicas como texto libre.
+  }
+
+  return {
+    objetivo: defaultObjective,
+    especificaciones: defaultSpecifications,
+    trabajoRealizado: visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.',
+    checklist: defaultChecklistLabels.map((label) => ({ label, checked: true })),
+    mediciones: [],
+    certificadoInstrumentos: '',
+    codigoInstrumento: '',
+    codigoServicio: visita.codigo || '',
+    atencion: '',
+  };
+};
+
+const getMeasurementVariableLabel = (measurement) => {
+  const variable = String(measurement.variable || '-').trim();
+  const unidad = String(measurement.unidad || '').trim();
+  if (!unidad || unidad === 'N/A' || variable.toLowerCase().includes(unidad.toLowerCase())) return variable;
+  return `${variable} ${unidad}`;
+};
+
 const reportStyles = `
   * { box-sizing: border-box; }
   .report-root {
@@ -72,7 +179,14 @@ const reportStyles = `
     font-family: Arial, Helvetica, sans-serif;
     color: #0f172a;
   }
-  .page-break { page-break-before: always; }
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+  .keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .summary-page {
     border: 1px solid #dbe3f0;
     border-radius: 14px;
@@ -143,11 +257,19 @@ const reportStyles = `
     font-weight: 700;
   }
 
-  .tech-page {
+  .tech-page,
+  .section-page,
+  .annex-page {
     background: #ffffff;
     color: #111827;
     min-height: 277mm;
+  }
+  .tech-page {
     padding: 4mm 7mm;
+  }
+  .section-page,
+  .annex-page {
+    padding: 5mm 7mm 7mm;
   }
   .tech-header {
     display: flex;
@@ -166,6 +288,35 @@ const reportStyles = `
     line-height: 1.45;
     color: #111827;
     font-weight: 700;
+  }
+  .continuation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 3px solid #d8d8d8;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .continuation-header img {
+    width: 132px;
+    height: auto;
+    object-fit: contain;
+  }
+  .continuation-meta {
+    text-align: right;
+    font-size: 11px;
+    line-height: 1.42;
+    color: #111827;
+    font-weight: 700;
+  }
+  .continuation-title {
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
   }
   .tech-line {
     border-top: 3px solid #d8d8d8;
@@ -269,26 +420,115 @@ const reportStyles = `
     text-align: center;
     font-weight: 800;
   }
-  .signature-grid {
+  .xbox.is-empty {
+    color: transparent;
+  }
+  .tech-body {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-line;
+  }
+  .report-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .measurement-table,
+  .codes-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .measurement-table th,
+  .measurement-table td,
+  .codes-table td {
+    border: 1px solid #a9a9a9;
+    padding: 5px 6px;
+    vertical-align: top;
+  }
+  .measurement-table th,
+  .codes-table td:first-child {
+    background: #eeeeee;
+    font-weight: 800;
+  }
+  .certificate-list {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .signature-section {
+    margin-top: 22px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-top: 18px;
+    grid-template-columns: 180px 1fr;
+    gap: 18px;
+    align-items: end;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .work-done {
+    font-size: 12px;
+    font-weight: 800;
   }
   .signature-box {
-    min-height: 86px;
+    min-height: 74px;
     border-top: 1px solid #9ca3af;
     padding-top: 6px;
     font-size: 11px;
+    text-align: center;
   }
   .signature-box img {
     max-height: 58px;
-    max-width: 180px;
+    max-width: 210px;
     object-fit: contain;
     display: block;
-    margin-bottom: 4px;
+    margin: 0 auto 4px;
+  }
+  .signature-space {
+    height: 58px;
+  }
+  .signature-name {
+    min-height: 14px;
+    font-weight: 700;
   }
   .tech-footer {
+    margin-top: 18px;
+    border-top: 2px solid #9ca3af;
+    padding-top: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 10px;
+    color: #334155;
+  }
+  .annex-item {
+    margin-top: 14px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .annex-item h2 {
+    margin: 0 0 4px;
+    border-bottom: 1px solid #cfcfcf;
+    background: #eeeeee;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .annex-description {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .annex-image {
+    width: 100%;
+    max-height: 170mm;
+    object-fit: contain;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    display: block;
+  }
+  .annex-footer {
     margin-top: 18px;
     border-top: 2px solid #9ca3af;
     padding-top: 8px;
@@ -303,33 +543,155 @@ const reportStyles = `
 const buildTechnicalVisitSection = (visita, index) => {
   const equipos = getEquipos(visita);
   const primaryEquipo = equipos[0] || null;
-  const equiposListado = equipos.length
-    ? equipos.map((equipo) => `${equipo.nombre}${equipo.modelo ? ` (${equipo.modelo})` : ''}${equipo.serial ? ` - ${equipo.serial}` : ''}`).join(' | ')
-    : '-';
-
-  const objetivo = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica y condiciones operativas del cliente.';
-  const especificaciones = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos correspondan al proceso esperado.';
-  const trabajos = visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.';
-  const resultadoFinal = visita.notasTecnicas || `Estado de cierre: ${estadoLabels[visita.estado] || visita.estado || '-'}. Se deja registro técnico de visita para trazabilidad.`;
-  const recomendaciones = 'Mantener plan de mantenimiento preventivo, validar calibración periódica y documentar cualquier desviación operativa.';
+  const reportData = parseTechnicalReportData(visita);
+  const objetivo = reportData.objetivo || defaultObjective;
+  const especificaciones = reportData.especificaciones || defaultSpecifications;
   const firmaImagenUrl = visita.firmaTecnicoImagenUrl || visita.tecnico?.firmaImagenUrl || visita.tecnico?.firmaImagenR2Key || '';
-  const selfie = Array.isArray(visita.adjuntos) ? visita.adjuntos.find((adjunto) => adjunto.tipo === 'selfie_firma') : null;
-  const selfieUrl = selfie?.publicUrl || selfie?.r2Key || '';
-  const evidencias = Array.isArray(visita.adjuntos) ? visita.adjuntos.filter((adjunto) => String(adjunto.tipo || '').startsWith('evidencia')) : [];
+  const certificadosAdjuntos = Array.isArray(visita.adjuntos)
+    ? visita.adjuntos.filter((adjunto) => adjunto.tipo === 'certificado_instrumento')
+    : [];
+  const imageAttachments = Array.isArray(visita.adjuntos)
+    ? visita.adjuntos.filter(isReportImageAttachment)
+    : [];
+  const codigoServicio = reportData.codigoServicio || buildServiceCode(visita);
+  const equipoIdentificacion = primaryEquipo?.codigoInterno || primaryEquipo?.sku || '-';
+  const measurementRows = reportData.mediciones.length
+    ? reportData.mediciones.map((measurement) => `
+      <tr>
+        <td>${escapeHtml(getMeasurementVariableLabel(measurement))}</td>
+        <td>${escapeHtml(measurement.programado || '-')}</td>
+        <td>${escapeHtml(measurement.observado || '-')}</td>
+        <td>${escapeHtml(measurement.diferencia || '-')}</td>
+        <td>${escapeHtml(measurement.cumple || '-')}</td>
+        <td>${escapeHtml(measurement.criterio || '-')}</td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6">Sin mediciones registradas.</td></tr>';
+  const clienteNombre = visita.cliente?.nombre || 'CLIENTE';
+  const logoUrl = getAssetUrl('/brand/logo-cmcing.png');
+  const fechaHeader = `${getReportCity(visita)}, ${formatTechnicalDate(visita.fecha)}`;
+  const firmaNombre = visita.firmaTecnicoTexto || visita.tecnico?.firmaTexto || visita.tecnico?.nombre || '';
+  const footerHtml = `
+    <div class="tech-footer">
+      <div><strong>CMC Ingeniería y Servicios.</strong><br/>Beauchef 1699 - Santiago</div>
+      <div style="text-align:right;">Fono: (56-9) 77667626<br/>Web: www.cmcing.cl</div>
+    </div>
+  `;
+  const continuationHeader = (title) => `
+    <div class="continuation-header keep-together">
+      <img src="${escapeHtml(logoUrl)}" alt="CMCiing" />
+      <div class="continuation-meta">
+        <div>${escapeHtml(fechaHeader)}</div>
+        <div class="continuation-title">${escapeHtml(title)}</div>
+        <div>${escapeHtml(clienteNombre)}</div>
+        <div>${escapeHtml(codigoServicio)}</div>
+      </div>
+    </div>
+  `;
+  const signatureImage = firmaImagenUrl
+    ? `<img src="${escapeHtml(getAssetUrl(firmaImagenUrl))}" alt="Firma técnico" />`
+    : '<div class="signature-space"></div>';
+  const signatureSection = `
+    <div class="signature-section">
+      <div class="work-done">❑ TRABAJO REALIZADO</div>
+      <div class="signature-box">
+        ${signatureImage}
+        <div class="signature-name">${escapeHtml(firmaNombre)}</div>
+        <div>Nombre y Firma Responsable</div>
+      </div>
+    </div>
+  `;
+  const initialSections = `
+    <div class="report-block">
+      <div class="section-bar">I. TRABAJOS REALIZADOS Y REPORTES</div>
+      <div class="tech-body">${escapeHtml(reportData.trabajoRealizado || '-')}</div>
+    </div>
+
+    <div class="report-block">
+      <div class="section-bar">II. ESTADO INICIAL</div>
+      ${reportData.checklist.map((item) => `
+        <div class="checkline"><span class="checkbox-mark"></span><span>${escapeHtml(item.label)}</span><span class="xbox ${item.checked ? '' : 'is-empty'}">X</span></div>
+      `).join('')}
+    </div>
+  `;
+  const closingPage = `
+    <section class="section-page page-break">
+      ${continuationHeader('INFORME TÉCNICO')}
+      <div class="report-block">
+        <div class="section-bar">III. REPORTES DE MEDICIÓN</div>
+        <table class="measurement-table">
+          <thead>
+            <tr>
+              <th>Variable de medición</th>
+              <th>Programado</th>
+              <th>Observado</th>
+              <th>Diferencia</th>
+              <th>Cumple</th>
+              <th>Criterio de aceptación</th>
+            </tr>
+          </thead>
+          <tbody>${measurementRows}</tbody>
+        </table>
+      </div>
+
+      <div class="report-block">
+        <div class="section-bar">IV. CONSIDERACIONES</div>
+        <div class="certificate-list">
+          ▪ Este documento certifica la verificación de los instrumentos individualizados, los cuales fueron verificados y certificados con instrumental calibrado en oficinas autorizadas para realizar este servicio.<br/>
+          ${renderLines(reportData.certificadoInstrumentos, 'Sin certificados registrados.')}
+          ${certificadosAdjuntos.length ? `<br/>${certificadosAdjuntos.map((adjunto) => `▪ ${escapeHtml(adjunto.nombreOriginal || adjunto.r2Key || 'Certificado adjunto')}`).join('<br/>')}` : ''}
+        </div>
+      </div>
+
+      <div class="report-block">
+        <div class="section-bar">V. CÓDIGO INSTRUMENTO Y CÓDIGO DEL SERVICIO</div>
+        <table class="codes-table">
+          <tbody>
+            <tr><td>CÓDIGO INSTRUMENTO</td><td>${escapeHtml(reportData.codigoInstrumento || '-')}</td></tr>
+            <tr><td>CÓDIGO DEL SERVICIO</td><td>${escapeHtml(codigoServicio || '-')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      ${signatureSection}
+      ${footerHtml}
+    </section>
+  `;
+  const anexos = imageAttachments.length ? `
+    <section class="annex-page page-break">
+      ${continuationHeader('ANEXO FOTOGRÁFICO')}
+
+      ${imageAttachments.map((adjunto, attachmentIndex) => {
+        const metadata = getAttachmentMetadata(adjunto);
+        const title = metadata.titulo || adjunto.nombreOriginal || `Imagen ${attachmentIndex + 1}`;
+        const description = metadata.descripcion || '';
+        const imageUrl = adjunto.publicUrl || adjunto.r2Key || '';
+        return `
+          <article class="annex-item">
+            <h2>${escapeHtml(title)}</h2>
+            ${description ? `<p class="annex-description">${escapeHtml(description)}</p>` : ''}
+            ${imageUrl ? `<img class="annex-image" src="${escapeHtml(getAssetUrl(imageUrl))}" alt="${escapeHtml(title)}" />` : ''}
+          </article>
+        `;
+      }).join('')}
+
+      ${footerHtml}
+    </section>
+  ` : '';
 
   return `
     <section class="tech-page ${index > 0 ? 'page-break' : ''}">
       <div class="tech-header">
         <img src="${escapeHtml(getAssetUrl('/brand/logo-cmcing.png'))}" alt="CMCiing" />
         <div class="tech-code">
-          ${escapeHtml(new Date(visita.fecha).toLocaleDateString('es-CL', { dateStyle: 'long' }))}<br/>
-          IT_${escapeHtml(new Date(visita.fecha).getFullYear())} ${escapeHtml(String(visita.id).padStart(4, '0'))} / ${escapeHtml(visita.cliente?.nombre || 'CLIENTE')}
+          ${escapeHtml(fechaHeader)}<br/>
+          ${escapeHtml(codigoServicio)} / ${escapeHtml(clienteNombre)}
         </div>
       </div>
 
       <div class="tech-address">
         Sres. ${escapeHtml(visita.cliente?.nombre || '-')}<br/>
-        Att. : Responsable de mantención<br/>
+        ${visita.cliente?.direccion ? `${escapeHtml(visita.cliente.direccion)}<br/>` : ''}
+        Att. : ${escapeHtml(reportData.atencion || 'Responsable de mantención')}<br/>
         Ref. : Informe Técnico de ${escapeHtml(visita.servicio?.descripcion || 'Servicio Técnico')}.
       </div>
 
@@ -344,7 +706,7 @@ const buildTechnicalVisitSection = (visita, index) => {
             <tr><td class="label">MARCA</td><td>${escapeHtml(primaryEquipo?.fabricante || '-')}</td></tr>
             <tr><td class="label">MODELO</td><td>${escapeHtml(primaryEquipo?.modelo || '-')}</td></tr>
             <tr><td class="label">N° SERIE</td><td>${escapeHtml(primaryEquipo?.serial || '-')}</td></tr>
-            <tr><td class="label">SKU / IDENTIFICACIÓN</td><td>${escapeHtml(primaryEquipo?.sku || '-')}</td></tr>
+            <tr><td class="label">Nº IDENTIFICACIÓN</td><td>${escapeHtml(equipoIdentificacion)}</td></tr>
             <tr><td class="label">UBICACIÓN</td><td>${escapeHtml(primaryEquipo?.ubicacion || '-')}</td></tr>
           </tbody>
         </table>
@@ -363,41 +725,12 @@ const buildTechnicalVisitSection = (visita, index) => {
         </tbody>
       </table>
 
-      <div class="section-bar">I. Estado inicial</div>
-      ${['Chequeo primario de funcionamiento', 'Chequeo estructural, accesorios y componentes', 'Chequeo de controles y comandos', 'Chequeo de conexiones eléctricas'].map((item) => `
-        <div class="checkline"><span class="checkbox-mark"></span><span>${item}</span><span class="xbox">X</span></div>
-      `).join('')}
-
-      <div class="section-bar">II. Trabajos realizados y reportes</div>
-      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(trabajos)}</div>
-
-      <div class="section-bar">III. Resultado final</div>
-      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(resultadoFinal)}</div>
-
-      <div class="section-bar">IV. Recomendaciones</div>
-      <div style="margin-top:10px;font-size:13px;line-height:1.45;white-space:pre-line;">${escapeHtml(recomendaciones)}</div>
-
-      ${evidencias.length ? `
-        <div class="section-bar">V. Evidencias adjuntas</div>
-        <div style="margin-top:8px;font-size:12px;line-height:1.5;">${evidencias.map((adjunto) => escapeHtml(adjunto.nombreOriginal || adjunto.r2Key || 'Adjunto')).join('<br/>')}</div>
-      ` : ''}
-
-      <div class="signature-grid">
-        <div class="signature-box">
-          ${firmaImagenUrl ? `<img src="${escapeHtml(getAssetUrl(firmaImagenUrl))}" alt="Firma técnico" />` : ''}
-          ${escapeHtml(visita.firmaTecnicoTexto || visita.tecnico?.firmaTexto || visita.tecnico?.nombre || '-')}
-        </div>
-        <div class="signature-box">
-          ${selfieUrl ? `<img src="${escapeHtml(getAssetUrl(selfieUrl))}" alt="Foto técnico" />` : ''}
-          Foto de validación al firmar
-        </div>
-      </div>
-
-      <div class="tech-footer">
-        <div><strong>CMC Ingeniería y Servicios.</strong><br/>Beaucheff 1699 - Santiago</div>
-        <div style="text-align:right;">Fono: (56-9) 77667626<br/>Web: www.cmcing.cl</div>
-      </div>
+      ${initialSections}
+      ${footerHtml}
     </section>
+
+    ${closingPage}
+    ${anexos}
   `;
 };
 
@@ -546,7 +879,11 @@ const generatePdfFromHtml = async ({ html, filename }) => {
         windowWidth: shell.scrollWidth,
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
+      pagebreak: {
+        mode: ['css', 'legacy'],
+        before: '.page-break',
+        avoid: ['.keep-together', '.continuation-header', '.report-block', '.signature-section', '.annex-item'],
+      },
     }).from(shell).save();
   } catch (error) {
     console.error('Error generando PDF html2pdf:', error);

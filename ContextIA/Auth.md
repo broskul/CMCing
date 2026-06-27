@@ -2,7 +2,7 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-06-05.
+Ultima actualizacion: 2026-06-27.
 La autenticacion directa usa usuarios reales en Supabase. Ya no existen credenciales locales ni usuarios bootstrap embebidos en runtime. Login real validado contra `Usuario`.
 
 ## Objetivo del modulo
@@ -22,6 +22,8 @@ Permitir acceso controlado con usuario y contrasena sin depender de Microsoft/En
   - tabla `Tecnico` para vinculo opcional `Usuario.tecnicoId`
 - Bootstrap operativo:
   - `scripts/create-user.mjs`
+- Migracion reciente:
+  - se replicaron los usuarios reales de `Usuario` al proyecto nuevo `vgfoubwwxqkrtpymzbat`
 
 ## Flujo funcional real
 
@@ -72,12 +74,14 @@ npm run create:user -- --email tecnico@dominio.cl --password "clave-segura" --na
 - No se aceptan credenciales por defecto en produccion.
 - `Usuario.tecnicoId` vincula cuentas tecnicas con el maestro `Tecnico`.
 - Logout borra la cookie; las sesiones son stateless y expiran por timestamp interno.
+- El conjunto actual migrado incluye `Carlos Rodriguez` y `Admin Pruebas`, con hashes y timestamps preservados.
 
 ## Riesgos y bugs conocidos
 
 - La autorizacion fina por rol aun no esta implementada; hoy una sesion valida entra a todos los endpoints internos.
 - QA 2026-05-29: `Usuario` ya aparece en PostgREST, `npm run create:user` funciona y login real fue validado con cookie HTTP-only.
 - Si la llave server configurada no corresponde al proyecto o no tiene permisos sobre `Usuario`, login y bootstrap fallan.
+- Si se cambia otra vez de proyecto Supabase, hay que repetir la copia de `Usuario` y resembrar la secuencia `id`.
 - Falta pantalla administrativa para cambio de contrasena.
 
 ## Pendientes reales y proximos pasos
