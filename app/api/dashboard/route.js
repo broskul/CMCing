@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDashboardStats } from '../../lib/cmms-store';
+import { getDashboardStats } from '../../lib/supabase-store';
 
 export async function GET() {
   try {

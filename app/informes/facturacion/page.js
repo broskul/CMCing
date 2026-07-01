@@ -104,7 +104,6 @@ export default function InformeFacturacionPage() {
         <section className="panel p-6">
           <p className="text-[0.85rem] uppercase tracking-[0.18em] text-neutral-500">Informe 2</p>
           <h1 className="mt-1 text-[1.6rem] font-semibold text-neutral-900">Informe de Servicios y Facturación</h1>
-          <p className="mt-2 text-[0.92rem] text-neutral-600">Consolida cantidad de servicios ejecutados e ingreso estimado por servicio y por cliente, con PDF y envío por correo HTML.</p>
         </section>
 
         <section className="panel p-5">

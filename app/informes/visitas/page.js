@@ -50,8 +50,125 @@ const getPrimaryEquipo = (visita) => getEquipos(visita)[0] || null;
 const getAssetUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('data:')) return url;
+  if (url.startsWith('r2://')) {
+    const key = url.replace(/^r2:\/\/[^/]+\//, '');
+    const path = `/api/r2/private?key=${encodeURIComponent(key)}`;
+    return typeof window === 'undefined' ? path : `${window.location.origin}${path}`;
+  }
+  if (url.startsWith('private/') || url.startsWith('firmas/') || url.startsWith('servicios/')) {
+    const path = `/api/r2/private?key=${encodeURIComponent(url)}`;
+    return typeof window === 'undefined' ? path : `${window.location.origin}${path}`;
+  }
   if (typeof window === 'undefined') return url;
   return `${window.location.origin}${url}`;
+};
+
+const defaultChecklistLabels = [
+  'Chequeo primario de funcionamiento',
+  'Chequeo estructural, accesorios y componentes',
+  'Chequeo de controles y comandos',
+  'Chequeo de conexiones eléctricas',
+];
+
+const defaultObjective = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica.';
+const defaultSpecifications = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos son los mismos para el proceso.';
+
+const splitLines = (value) => String(value || '')
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter(Boolean);
+
+const renderLines = (value, empty = '-') => {
+  const lines = splitLines(value);
+  if (!lines.length) return escapeHtml(empty);
+  return lines.map((line) => `▪ ${escapeHtml(line)}`).join('<br/>');
+};
+
+const getAttachmentMetadata = (adjunto) => {
+  if (!adjunto?.metadata) return {};
+  if (typeof adjunto.metadata === 'object') return adjunto.metadata;
+  try {
+    return JSON.parse(adjunto.metadata);
+  } catch {
+    return {};
+  }
+};
+
+const isReportImageAttachment = (adjunto) => {
+  const type = String(adjunto?.tipo || '');
+  const mimeType = String(adjunto?.mimeType || '');
+  return ['imagen_adjunta', 'evidencia'].includes(type) && mimeType.startsWith('image/');
+};
+
+const buildServiceCode = (visita) => {
+  const fecha = visita.fecha ? new Date(visita.fecha) : new Date();
+  const year = Number.isNaN(fecha.getTime()) ? new Date().getFullYear() : fecha.getFullYear();
+  return visita.codigo || `IT_${year} ${String(visita.id || 0).padStart(4, '0')}`;
+};
+
+const capitalizeMonth = (value) => String(value || '').replace(
+  /de ([a-záéíóúñ]+) de/i,
+  (_, month) => `de ${month.charAt(0).toUpperCase()}${month.slice(1)} de`
+);
+
+const formatTechnicalDate = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  return capitalizeMonth(date.toLocaleDateString('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }));
+};
+
+const getReportCity = (visita) => {
+  const direccion = String(visita.cliente?.direccion || '');
+  if (/puerto\s+varas/i.test(direccion)) return 'Puerto Varas';
+  if (/santiago/i.test(direccion)) return 'Santiago';
+  return 'Santiago';
+};
+
+const parseTechnicalReportData = (visita) => {
+  try {
+    const parsed = JSON.parse(visita.notasTecnicas || '');
+    if (parsed?.schema === 'cmcing_technical_report') {
+      return {
+        objetivo: parsed.objetivo || defaultObjective,
+        especificaciones: parsed.especificaciones || defaultSpecifications,
+        trabajoRealizado: parsed.trabajoRealizado || visita.descripcion || '',
+        checklist: Array.isArray(parsed.checklist) && parsed.checklist.length
+          ? parsed.checklist
+          : defaultChecklistLabels.map((label) => ({ label, checked: true })),
+        mediciones: Array.isArray(parsed.mediciones) ? parsed.mediciones : [],
+        certificadoInstrumentos: parsed.certificadoInstrumentos || '',
+        codigoInstrumento: parsed.codigoInstrumento || '',
+        codigoServicio: parsed.codigoServicio || visita.codigo || '',
+        atencion: parsed.atencion || '',
+      };
+    }
+  } catch {
+    // Visitas antiguas guardaban notas técnicas como texto libre.
+  }
+
+  return {
+    objetivo: defaultObjective,
+    especificaciones: defaultSpecifications,
+    trabajoRealizado: visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.',
+    checklist: defaultChecklistLabels.map((label) => ({ label, checked: true })),
+    mediciones: [],
+    certificadoInstrumentos: '',
+    codigoInstrumento: '',
+    codigoServicio: visita.codigo || '',
+    atencion: '',
+  };
+};
+
+const getMeasurementVariableLabel = (measurement) => {
+  const variable = String(measurement.variable || '-').trim();
+  const unidad = String(measurement.unidad || '').trim();
+  if (!unidad || unidad === 'N/A' || variable.toLowerCase().includes(unidad.toLowerCase())) return variable;
+  return `${variable} ${unidad}`;
 };
 
 const reportStyles = `
@@ -62,7 +179,14 @@ const reportStyles = `
     font-family: Arial, Helvetica, sans-serif;
     color: #0f172a;
   }
-  .page-break { page-break-before: always; }
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+  .keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .summary-page {
     border: 1px solid #dbe3f0;
     border-radius: 14px;
@@ -133,11 +257,19 @@ const reportStyles = `
     font-weight: 700;
   }
 
-  .tech-page {
-    border: 1px solid #d5deec;
+  .tech-page,
+  .section-page,
+  .annex-page {
     background: #ffffff;
     color: #111827;
-    padding: 14px;
+    min-height: 277mm;
+  }
+  .tech-page {
+    padding: 4mm 7mm;
+  }
+  .section-page,
+  .annex-page {
+    padding: 5mm 7mm 7mm;
   }
   .tech-header {
     display: flex;
@@ -146,23 +278,72 @@ const reportStyles = `
     gap: 10px;
   }
   .tech-header img {
-    width: 165px;
+    width: 178px;
     height: auto;
     object-fit: contain;
   }
   .tech-code {
     text-align: right;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #111827;
+    font-weight: 700;
+  }
+  .continuation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 3px solid #d8d8d8;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .continuation-header img {
+    width: 132px;
+    height: auto;
+    object-fit: contain;
+  }
+  .continuation-meta {
+    text-align: right;
     font-size: 11px;
-    line-height: 1.35;
-    color: #334155;
+    line-height: 1.42;
+    color: #111827;
+    font-weight: 700;
+  }
+  .continuation-title {
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
   }
   .tech-line {
-    border-top: 2px solid #e5e7eb;
-    margin: 10px 0 12px;
+    border-top: 3px solid #d8d8d8;
+    margin: 8px 0 12px;
+  }
+  .tech-address {
+    margin: 22px 0 18px 28px;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 700;
+  }
+  .tech-title {
+    margin: 0 0 18px;
+    text-align: center;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .equipment-heading {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 800;
   }
   .tech-grid {
     display: grid;
-    grid-template-columns: 1.4fr 0.85fr;
+    grid-template-columns: 1fr 210px;
     gap: 10px;
     align-items: start;
   }
@@ -172,56 +353,184 @@ const reportStyles = `
     font-size: 11px;
   }
   .tech-meta td {
-    border: 1px solid #e5e7eb;
-    padding: 5px;
+    border: 0;
+    padding: 2px 5px 2px 0;
     vertical-align: top;
     background: #ffffff;
     color: #111827;
+    font-size: 13px;
   }
   .tech-meta td.label {
-    width: 26%;
+    width: 150px;
     font-weight: 700;
-    background: #f4f6fa;
+    background: #ffffff;
   }
   .tech-photo {
-    border: 1px solid #e5e7eb;
     background: #ffffff;
-    border-radius: 4px;
-    min-height: 210px;
+    min-height: 145px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 2px;
   }
   .tech-photo img {
     width: 100%;
-    max-height: 190px;
+    max-height: 160px;
     object-fit: contain;
   }
-  .tech-block {
-    margin-top: 9px;
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
-    color: #111827;
+  .classic-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 12px;
   }
-  .tech-block-title {
-    background: #edf2fb;
-    border-bottom: 1px solid #d9e1ef;
-    font-size: 11px;
+  .classic-table td {
+    border: 1px solid #a9a9a9;
+    padding: 4px 6px;
+    vertical-align: top;
+  }
+  .classic-table .label-row {
     font-weight: 700;
-    padding: 5px 7px;
+  }
+  .section-bar {
+    margin-top: 18px;
+    border-bottom: 1px solid #cfcfcf;
+    background: #eeeeee;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 800;
     text-transform: uppercase;
   }
-  .tech-block-body {
-    padding: 7px;
-    font-size: 11px;
+  .checkline {
+    display: grid;
+    grid-template-columns: 18px 1fr 58px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+  .checkbox-mark {
+    width: 7px;
+    height: 7px;
+    border: 1px solid #111827;
+  }
+  .xbox {
+    border: 1px solid #6b7280;
+    padding: 2px 0;
+    text-align: center;
+    font-weight: 800;
+  }
+  .xbox.is-empty {
+    color: transparent;
+  }
+  .tech-body {
+    margin-top: 10px;
+    font-size: 13px;
     line-height: 1.45;
-    min-height: 52px;
     white-space: pre-line;
   }
-  .tech-footer {
+  .report-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .measurement-table,
+  .codes-table {
+    width: 100%;
+    border-collapse: collapse;
     margin-top: 10px;
-    border-top: 1px solid #e5e7eb;
+    font-size: 11px;
+  }
+  .measurement-table th,
+  .measurement-table td,
+  .codes-table td {
+    border: 1px solid #a9a9a9;
+    padding: 5px 6px;
+    vertical-align: top;
+  }
+  .measurement-table th,
+  .codes-table td:first-child {
+    background: #eeeeee;
+    font-weight: 800;
+  }
+  .certificate-list {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .signature-section {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 18px;
+    align-items: end;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .work-done {
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .signature-box {
+    min-height: 74px;
+    border-top: 1px solid #9ca3af;
+    padding-top: 6px;
+    font-size: 11px;
+    text-align: center;
+  }
+  .signature-box img {
+    max-height: 58px;
+    max-width: 210px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 4px;
+  }
+  .signature-space {
+    height: 58px;
+  }
+  .signature-name {
+    min-height: 14px;
+    font-weight: 700;
+  }
+  .tech-footer {
+    margin-top: 18px;
+    border-top: 2px solid #9ca3af;
+    padding-top: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 10px;
+    color: #334155;
+  }
+  .annex-item {
+    margin-top: 14px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .annex-item h2 {
+    margin: 0 0 4px;
+    border-bottom: 1px solid #cfcfcf;
+    background: #eeeeee;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .annex-description {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .annex-image {
+    width: 100%;
+    max-height: 170mm;
+    object-fit: contain;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    display: block;
+  }
+  .annex-footer {
+    margin-top: 18px;
+    border-top: 2px solid #9ca3af;
     padding-top: 8px;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -234,39 +543,171 @@ const reportStyles = `
 const buildTechnicalVisitSection = (visita, index) => {
   const equipos = getEquipos(visita);
   const primaryEquipo = equipos[0] || null;
-  const equiposListado = equipos.length
-    ? equipos.map((equipo) => `${equipo.nombre}${equipo.modelo ? ` (${equipo.modelo})` : ''}${equipo.serial ? ` - ${equipo.serial}` : ''}`).join(' | ')
-    : '-';
+  const reportData = parseTechnicalReportData(visita);
+  const objetivo = reportData.objetivo || defaultObjective;
+  const especificaciones = reportData.especificaciones || defaultSpecifications;
+  const firmaImagenUrl = visita.firmaTecnicoImagenUrl || visita.tecnico?.firmaImagenUrl || visita.tecnico?.firmaImagenR2Key || '';
+  const certificadosAdjuntos = Array.isArray(visita.adjuntos)
+    ? visita.adjuntos.filter((adjunto) => adjunto.tipo === 'certificado_instrumento')
+    : [];
+  const imageAttachments = Array.isArray(visita.adjuntos)
+    ? visita.adjuntos.filter(isReportImageAttachment)
+    : [];
+  const codigoServicio = reportData.codigoServicio || buildServiceCode(visita);
+  const equipoIdentificacion = primaryEquipo?.codigoInterno || primaryEquipo?.sku || '-';
+  const measurementRows = reportData.mediciones.length
+    ? reportData.mediciones.map((measurement) => `
+      <tr>
+        <td>${escapeHtml(getMeasurementVariableLabel(measurement))}</td>
+        <td>${escapeHtml(measurement.programado || '-')}</td>
+        <td>${escapeHtml(measurement.observado || '-')}</td>
+        <td>${escapeHtml(measurement.diferencia || '-')}</td>
+        <td>${escapeHtml(measurement.cumple || '-')}</td>
+        <td>${escapeHtml(measurement.criterio || '-')}</td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6">Sin mediciones registradas.</td></tr>';
+  const clienteNombre = visita.cliente?.nombre || 'CLIENTE';
+  const logoUrl = getAssetUrl('/brand/logo-cmcing.png');
+  const fechaHeader = `${getReportCity(visita)}, ${formatTechnicalDate(visita.fecha)}`;
+  const firmaNombre = visita.firmaTecnicoTexto || visita.tecnico?.firmaTexto || visita.tecnico?.nombre || '';
+  const footerHtml = `
+    <div class="tech-footer">
+      <div><strong>CMC Ingeniería y Servicios.</strong><br/>Beauchef 1699 - Santiago</div>
+      <div style="text-align:right;">Fono: (56-9) 77667626<br/>Web: www.cmcing.cl</div>
+    </div>
+  `;
+  const continuationHeader = (title) => `
+    <div class="continuation-header keep-together">
+      <img src="${escapeHtml(logoUrl)}" alt="CMCiing" />
+      <div class="continuation-meta">
+        <div>${escapeHtml(fechaHeader)}</div>
+        <div class="continuation-title">${escapeHtml(title)}</div>
+        <div>${escapeHtml(clienteNombre)}</div>
+        <div>${escapeHtml(codigoServicio)}</div>
+      </div>
+    </div>
+  `;
+  const signatureImage = firmaImagenUrl
+    ? `<img src="${escapeHtml(getAssetUrl(firmaImagenUrl))}" alt="Firma técnico" />`
+    : '<div class="signature-space"></div>';
+  const signatureSection = `
+    <div class="signature-section">
+      <div class="work-done">❑ TRABAJO REALIZADO</div>
+      <div class="signature-box">
+        ${signatureImage}
+        <div class="signature-name">${escapeHtml(firmaNombre)}</div>
+        <div>Nombre y Firma Responsable</div>
+      </div>
+    </div>
+  `;
+  const initialSections = `
+    <div class="report-block">
+      <div class="section-bar">I. TRABAJOS REALIZADOS Y REPORTES</div>
+      <div class="tech-body">${escapeHtml(reportData.trabajoRealizado || '-')}</div>
+    </div>
 
-  const objetivo = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica y condiciones operativas del cliente.';
-  const especificaciones = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos correspondan al proceso esperado.';
-  const estadoInicial = estadoInicialTexto[visita.estado] || estadoInicialTexto.pendiente;
-  const trabajos = visita.descripcion || 'Se ejecuta inspección técnica y pruebas funcionales según plan de servicio.';
-  const resultadoFinal = `Estado de cierre: ${estadoLabels[visita.estado] || visita.estado || '-'}. Se deja registro técnico de visita para trazabilidad.`;
-  const recomendaciones = 'Mantener plan de mantenimiento preventivo, validar calibración periódica y documentar cualquier desviación operativa.';
+    <div class="report-block">
+      <div class="section-bar">II. ESTADO INICIAL</div>
+      ${reportData.checklist.map((item) => `
+        <div class="checkline"><span class="checkbox-mark"></span><span>${escapeHtml(item.label)}</span><span class="xbox ${item.checked ? '' : 'is-empty'}">X</span></div>
+      `).join('')}
+    </div>
+  `;
+  const closingPage = `
+    <section class="section-page page-break">
+      ${continuationHeader('INFORME TÉCNICO')}
+      <div class="report-block">
+        <div class="section-bar">III. REPORTES DE MEDICIÓN</div>
+        <table class="measurement-table">
+          <thead>
+            <tr>
+              <th>Variable de medición</th>
+              <th>Programado</th>
+              <th>Observado</th>
+              <th>Diferencia</th>
+              <th>Cumple</th>
+              <th>Criterio de aceptación</th>
+            </tr>
+          </thead>
+          <tbody>${measurementRows}</tbody>
+        </table>
+      </div>
+
+      <div class="report-block">
+        <div class="section-bar">IV. CONSIDERACIONES</div>
+        <div class="certificate-list">
+          ▪ Este documento certifica la verificación de los instrumentos individualizados, los cuales fueron verificados y certificados con instrumental calibrado en oficinas autorizadas para realizar este servicio.<br/>
+          ${renderLines(reportData.certificadoInstrumentos, 'Sin certificados registrados.')}
+          ${certificadosAdjuntos.length ? `<br/>${certificadosAdjuntos.map((adjunto) => `▪ ${escapeHtml(adjunto.nombreOriginal || adjunto.r2Key || 'Certificado adjunto')}`).join('<br/>')}` : ''}
+        </div>
+      </div>
+
+      <div class="report-block">
+        <div class="section-bar">V. CÓDIGO INSTRUMENTO Y CÓDIGO DEL SERVICIO</div>
+        <table class="codes-table">
+          <tbody>
+            <tr><td>CÓDIGO INSTRUMENTO</td><td>${escapeHtml(reportData.codigoInstrumento || '-')}</td></tr>
+            <tr><td>CÓDIGO DEL SERVICIO</td><td>${escapeHtml(codigoServicio || '-')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      ${signatureSection}
+      ${footerHtml}
+    </section>
+  `;
+  const anexos = imageAttachments.length ? `
+    <section class="annex-page page-break">
+      ${continuationHeader('ANEXO FOTOGRÁFICO')}
+
+      ${imageAttachments.map((adjunto, attachmentIndex) => {
+        const metadata = getAttachmentMetadata(adjunto);
+        const title = metadata.titulo || adjunto.nombreOriginal || `Imagen ${attachmentIndex + 1}`;
+        const description = metadata.descripcion || '';
+        const imageUrl = adjunto.publicUrl || adjunto.r2Key || '';
+        return `
+          <article class="annex-item">
+            <h2>${escapeHtml(title)}</h2>
+            ${description ? `<p class="annex-description">${escapeHtml(description)}</p>` : ''}
+            ${imageUrl ? `<img class="annex-image" src="${escapeHtml(getAssetUrl(imageUrl))}" alt="${escapeHtml(title)}" />` : ''}
+          </article>
+        `;
+      }).join('')}
+
+      ${footerHtml}
+    </section>
+  ` : '';
 
   return `
     <section class="tech-page ${index > 0 ? 'page-break' : ''}">
       <div class="tech-header">
         <img src="${escapeHtml(getAssetUrl('/brand/logo-cmcing.png'))}" alt="CMCiing" />
         <div class="tech-code">
-          Informe Técnico de Visita<br/>
-          ID visita: ${escapeHtml(visita.id)}<br/>
-          Fecha emisión: ${escapeHtml(new Date().toLocaleString('es-CL'))}
+          ${escapeHtml(fechaHeader)}<br/>
+          ${escapeHtml(codigoServicio)} / ${escapeHtml(clienteNombre)}
         </div>
       </div>
+
+      <div class="tech-address">
+        Sres. ${escapeHtml(visita.cliente?.nombre || '-')}<br/>
+        ${visita.cliente?.direccion ? `${escapeHtml(visita.cliente.direccion)}<br/>` : ''}
+        Att. : ${escapeHtml(reportData.atencion || 'Responsable de mantención')}<br/>
+        Ref. : Informe Técnico de ${escapeHtml(visita.servicio?.descripcion || 'Servicio Técnico')}.
+      </div>
+
       <div class="tech-line"></div>
+      <h1 class="tech-title">INFORME TÉCNICO</h1>
+      <p class="equipment-heading">DATOS DEL EQUIPO</p>
 
       <div class="tech-grid">
         <table class="tech-meta">
           <tbody>
-            <tr><td class="label">Cliente</td><td>${escapeHtml(visita.cliente?.nombre || '-')}</td></tr>
-            <tr><td class="label">Equipos</td><td>${escapeHtml(equiposListado)}</td></tr>
-            <tr><td class="label">Servicio</td><td>${escapeHtml(visita.servicio?.descripcion || '-')}</td></tr>
-            <tr><td class="label">Técnico</td><td>${escapeHtml(visita.tecnico?.nombre || '-')}</td></tr>
-            <tr><td class="label">Vendedor</td><td>${escapeHtml(visita.vendedor?.nombre || '-')}</td></tr>
-            <tr><td class="label">Fecha visita</td><td>${escapeHtml(formatFriendlyDate(visita.fecha))}</td></tr>
-            <tr><td class="label">Estado</td><td>${escapeHtml(estadoLabels[visita.estado] || visita.estado || '-')}</td></tr>
+            <tr><td class="label">EQUIPO</td><td>${escapeHtml(primaryEquipo?.nombre || getEquiposLabel(visita))}</td></tr>
+            <tr><td class="label">MARCA</td><td>${escapeHtml(primaryEquipo?.fabricante || '-')}</td></tr>
+            <tr><td class="label">MODELO</td><td>${escapeHtml(primaryEquipo?.modelo || '-')}</td></tr>
+            <tr><td class="label">N° SERIE</td><td>${escapeHtml(primaryEquipo?.serial || '-')}</td></tr>
+            <tr><td class="label">Nº IDENTIFICACIÓN</td><td>${escapeHtml(equipoIdentificacion)}</td></tr>
+            <tr><td class="label">UBICACIÓN</td><td>${escapeHtml(primaryEquipo?.ubicacion || '-')}</td></tr>
           </tbody>
         </table>
 
@@ -275,41 +716,21 @@ const buildTechnicalVisitSection = (visita, index) => {
         </div>
       </div>
 
-      <div class="tech-block">
-        <div class="tech-block-title">Objetivo</div>
-        <div class="tech-block-body">- ${escapeHtml(objetivo)}</div>
-      </div>
+      <table class="classic-table">
+        <tbody>
+          <tr><td class="label-row">OBJETIVO</td></tr>
+          <tr><td>- ${escapeHtml(objetivo)}</td></tr>
+          <tr><td class="label-row">ESPECIFICACIONES</td></tr>
+          <tr><td>- ${escapeHtml(especificaciones)}</td></tr>
+        </tbody>
+      </table>
 
-      <div class="tech-block">
-        <div class="tech-block-title">Especificaciones</div>
-        <div class="tech-block-body">- ${escapeHtml(especificaciones)}</div>
-      </div>
-
-      <div class="tech-block">
-        <div class="tech-block-title">I. Estado inicial</div>
-        <div class="tech-block-body">${escapeHtml(estadoInicial)}</div>
-      </div>
-
-      <div class="tech-block">
-        <div class="tech-block-title">II. Trabajos realizados y reportes</div>
-        <div class="tech-block-body">${escapeHtml(trabajos)}</div>
-      </div>
-
-      <div class="tech-block">
-        <div class="tech-block-title">III. Resultado final</div>
-        <div class="tech-block-body">${escapeHtml(resultadoFinal)}</div>
-      </div>
-
-      <div class="tech-block">
-        <div class="tech-block-title">IV. Recomendaciones</div>
-        <div class="tech-block-body">${escapeHtml(recomendaciones)}</div>
-      </div>
-
-      <div class="tech-footer">
-        <div>Firma técnico responsable: ${escapeHtml(visita.tecnico?.nombre || '-')}</div>
-        <div style="text-align:right;">CMCiing - Informe técnico por visita</div>
-      </div>
+      ${initialSections}
+      ${footerHtml}
     </section>
+
+    ${closingPage}
+    ${anexos}
   `;
 };
 
@@ -458,7 +879,11 @@ const generatePdfFromHtml = async ({ html, filename }) => {
         windowWidth: shell.scrollWidth,
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
+      pagebreak: {
+        mode: ['css', 'legacy'],
+        before: '.page-break',
+        avoid: ['.keep-together', '.continuation-header', '.report-block', '.signature-section', '.annex-item'],
+      },
     }).from(shell).save();
   } catch (error) {
     console.error('Error generando PDF html2pdf:', error);
@@ -610,7 +1035,6 @@ export default function InformeVisitasPage() {
         <section className="panel p-6">
           <p className="text-[0.85rem] uppercase tracking-[0.18em] text-neutral-500">Informe 1</p>
           <h1 className="mt-1 text-[1.6rem] font-semibold text-neutral-900">Informe de Visitas</h1>
-          <p className="mt-2 text-[0.92rem] text-neutral-600">Ahora el PDF completo se genera con html2pdf (formato informe) y cada visita puede emitir su informe técnico en PDF individual.</p>
         </section>
 
         <section className="panel p-5">

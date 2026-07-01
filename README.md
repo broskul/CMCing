@@ -1,29 +1,61 @@
-# CMCing CMMS
+# CMCing - Gestión de Servicios Médicos
 
-Aplicacion web para operar un CMMS de servicios tecnicos: clientes, contactos, direcciones, equipos por numero de serie, empleados, mantenciones, incidentes, visitas, informes y adjuntos fotograficos.
+Aplicación web para gestionar visitas y servicios técnicos de equipos médicos para la empresa CMCing.
 
-## Stack
+## Características
 
-- Next.js 16
-- React 19
-- Prisma ORM
-- Supabase Postgres
-- Cloudflare R2 para imagenes de visitas
-- Microsoft Graph para envio de informes por correo
+- Dashboard con estadísticas
+- Backoffice para gestionar clientes, equipos, servicios, vendedores y técnicos
+- Página para crear nuevas visitas/servicios
+- Diseño moderno con gradientes y transparencias
+- API RESTful con Next.js
+- Base de datos PostgreSQL con Prisma ORM
 
-## Puesta en marcha
+## Tecnologías
 
-1. Completa `.env.local`.
-2. Ejecuta `npm install`.
-3. Aplica el SQL de `schema.sql` en Supabase o usa Prisma Migrate.
-4. Genera Prisma Client con `npx prisma generate`.
-5. Opcional: carga datos de prueba con `npm run seed`.
-6. Ejecuta `npm run dev`.
+- Frontend: Next.js 16, React 19, Tailwind CSS
+- Backend: Next.js API Routes
+- Base de datos: PostgreSQL
+- ORM: Prisma
 
-## Modulos
+## Instalación
 
-- `/` dashboard CMMS
-- `/admin` backoffice de clientes, equipos, empleados, servicios, mantenciones, incidentes y visitas
-- `/nueva-visita` creacion de visita con imagenes hacia R2
-- `/informes/visitas` informe operativo y PDF tecnico
-- `/informes/facturacion` informe de servicios/facturacion
+1. Clona el repositorio
+2. Instala dependencias: `npm install`
+3. Configura la base de datos PostgreSQL y actualiza `DATABASE_URL` en `.env`
+4. Ejecuta las migraciones: `npx prisma migrate dev`
+5. Genera el cliente Prisma: `npx prisma generate`
+6. Ejecuta el servidor de desarrollo: `npm run dev`
+
+## Uso
+
+- Dashboard: http://localhost:3000
+- Backoffice: http://localhost:3000/admin
+- Equipos: http://localhost:3000/equipos
+- Nueva Visita: http://localhost:3000/admin?modulo=visitas&nuevo=1
+
+## Estructura de la Base de Datos
+
+- Clientes
+- Equipos (asociados a clientes)
+- Servicios
+- Vendedores
+- Técnicos
+- Visitas (relaciona cliente, equipo, técnico, vendedor, servicio)
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

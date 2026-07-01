@@ -2,70 +2,64 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-04-17.
-Aplicacion en modo demo, desconectada de base de datos productiva y operando con store en memoria.
+Ultima actualizacion: 2026-06-02.
+El modo demo fue retirado del runtime. La aplicacion queda en modo produccion, con APIs conectadas directo a Supabase.
 
 ## Objetivo del modulo
 
-Permitir demostracion comercial funcional completa (CRUD de maestros, visitas, informes y correo) sin dependencia de Supabase/DB productiva.
+Registrar la decision de no volver a depender de datos en memoria para flujos operativos o comerciales.
 
 ## Fuentes de verdad y sistemas externos
 
-- Store en memoria global:
-  - `app/lib/demo-store.js`
-- Front principal y navegacion:
-  - `app/page.js`
+- Datos runtime:
+  - `app/lib/supabase-store.js`
+  - Supabase/Postgres
+- Shell y navegacion:
+  - `app/components/AppShell.js`
+  - `app/components/AppSidebar.js`
   - `app/layout.js`
-- Assets demo:
-  - `public/brand/logo-cmcing.png`
-  - `public/productos/termociclador-eq-bm-68-ref.png`
-  - `public/productos/gabinete-a2-eq-mo-86-ref.jpg`
+- Offline local:
+  - `app/lib/offline-queue.js`
+  - `public/sw.js`
+- R2:
+  - `app/lib/r2.js`
+  - `app/api/tecnico/sync/route.js`
 
 ## Flujo funcional real
 
-- CRUD maestros y visitas usa APIs demo (`/api/*`) contra `demo-store`.
-- Cambios se reflejan en pantalla inmediatamente.
-- Los cambios NO persisten al reiniciar servidor/proceso.
-- Dashboard muestra resumen de entidades e imagenes de productos.
-
-## Archivos clave
-
-- `app/lib/demo-store.js`
-- `app/api/clientes/*`
-- `app/api/equipos/*`
-- `app/api/servicios/*`
-- `app/api/vendedores/*`
-- `app/api/tecnicos/*`
-- `app/api/visitas/*`
-- `app/api/dashboard/route.js`
-- `app/admin/page.js`
-- `app/page.js`
+- Login protege paginas y APIs usando usuarios `Usuario` en Supabase.
+- Sidebar izquierda organiza los modulos comerciales, operativos, personas e informes.
+- CRUD maestro sigue disponible en `/admin?modulo=...`, con persistencia real.
+- Cotizaciones permiten crear, exportar PDF y enviar por MS Graph.
+- Equipos es la pantalla unica para el maestro de equipos: permite buscar por SKU, serial, nombre y cliente, crear, editar, eliminar, revisar imagen, servicios relacionados y hoja de vida.
+- La pantalla `/equipos` opera como vista 360: desde equipo se puede abrir detalle de cliente, servicio, tecnico y visita relacionada; al abrir un equipo relacionado se cambia la ficha activa.
+- Calendario lista visitas agrupadas por dia.
+- App tecnica `/tecnico` guarda servicios en IndexedDB si no hay senal.
+- Al volver la conexion, la cola intenta sincronizar contra `/api/tecnico/sync`.
+- `/api/tecnico/sync` recibe `clientMutationId`, lo persiste en `Visita.clienteMutationId` para idempotencia, sube firma/selfie/evidencias privadas a R2 y elimina duplicados al reintentar.
+- `/api/r2/private` sirve adjuntos privados solo con sesion valida para que informes internos puedan mostrar firma/selfie sin URL publica.
+- En mobile y tablet, la navegacion cambia a topbar con drawer lateral.
 
 ## Decisiones tecnicas vigentes
 
-- Se removio acceso runtime a Prisma para operaciones de app.
-- Se conserva semilla demo en memoria con relaciones cliente/equipo/visita/servicio.
-- Se incluyo campo `imagenUrl` en equipos para informes y correos.
-- Nueva Visita soporta seleccion multiple de equipos por visita usando `equipoIds` (manteniendo `equipoId` como compatibilidad para pantallas existentes).
+- No se muestra contexto tecnico en la UI; esta informacion queda en `ContextIA`.
+- `app/lib/demo-store.js` fue eliminado.
+- La app tecnica captura adjuntos, firma dibujada, texto de firma y selfie frontal al firmar.
+- QA 2026-05-29 valido la app tecnica con Cristian Manzor: firma completa, selfie frontal simulada, foto/PDF de evidencia, cola servidor `SINCRONIZADO` y segundo envio respondio `duplicate`.
+- Service worker cachea recursos GET visitados para mejorar uso offline despues de la primera carga, pero los assets `/_next/` y las APIs `/api/*` se resuelven network-first para evitar CSS/JS o datos obsoletos despues de cambios de UI/backend.
+- `app/offline-register.js` fuerza `registration.update()` y recarga al cambiar el controller para activar rapido nuevas versiones de cache.
+- Breakpoints vigentes: sidebar fijo en escritorio, drawer off-canvas bajo 900px, tablas de maestros convertidas a fichas bajo 760px, paddings reducidos bajo 720px/520px y tablas secundarias con scroll horizontal controlado.
+- Equipos no vive en `/admin?modulo=equipos` porque requiere lectura visual y relaciones operativas; la URL antigua redirige a `/equipos`.
+- `Nueva visita` no vive como item independiente del sidebar; `/nueva-visita` redirige a `/admin?modulo=visitas&nuevo=1` para abrir el alta dentro de Visitas.
 
 ## Riesgos y bugs conocidos
 
-- Reinicio de servidor limpia estado demo.
-- Multiples instancias de app no comparten estado.
-- No hay auditoria de cambios en modo demo.
-
-## Workarounds actuales
-
-- Re-semilla automatica al levantar la app.
-- Datos de ejemplo cubren escenario comercial base.
+- IndexedDB local depende del dispositivo/navegador del tecnico.
+- La sincronizacion real requiere variables R2 completas.
+- Los adjuntos no deben publicarse con URL directa. La UI debe usar el endpoint autenticado `/api/r2/private` y las firmas deben quedar bajo `private/firmas/tecnicos`.
+- Sin llaves reales de Supabase no se puede iniciar sesion ni probar CRUD.
 
 ## Pendientes reales y proximos pasos
 
-- Agregar boton "reset demo" para resembrar sin reiniciar.
-- Agregar snapshot opcional en archivo local para demos largas.
-- Preparar feature flag para alternar demo vs produccion.
-
-## Notas para presentacion y onboarding
-
-- Aclarar al cliente que es entorno demostrativo sin persistencia.
-- Demostrar cadena completa: editar maestro -> crear visita -> emitir informe -> enviar correo.
+- Agregar indicador de conflictos si un maestro cambia mientras hay trabajos offline.
+- Agregar pruebas E2E de la app tecnica en modo offline/online.

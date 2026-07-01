@@ -2,73 +2,71 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-04-17.
-Integracion de correo por Microsoft Graph activa a nivel de codigo y pendiente de credenciales completas en `.env.local`.
+Ultima actualizacion: 2026-05-29.
+Microsoft Graph se usa para enviar informes y cotizaciones con correo HTML y PDF adjunto.
 
 ## Objetivo del modulo
 
-Enviar informes CMC en formato HTML con branding y PDF adjunto, a destinatarios internos y cliente final.
+Enviar comunicaciones corporativas desde mailbox CMCing usando Graph API app-only.
 
 ## Fuentes de verdad y sistemas externos
 
-- Endpoint Graph OAuth token:
+- OAuth token:
   - `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`
-- Endpoint Graph envio correo:
+- Envio correo:
   - `https://graph.microsoft.com/v1.0/users/{sender}/sendMail`
-- Implementacion local:
+- Implementacion:
   - `app/lib/reporting.js`
   - `app/api/informes/email/route.js`
+  - `app/api/cotizaciones/[id]/email/route.js`
 
-## Configuracion vigente
-
-Variables requeridas:
+## Variables requeridas
 
 - `MSGRAPH_TENANT_ID`
 - `MSGRAPH_CLIENT_ID`
 - `MSGRAPH_CLIENT_SECRET`
 - `MSGRAPH_SENDER`
 
-Actualmente cargadas en `.env.local`:
+Variables R2 relacionadas con adjuntos tecnicos, tambien en `.env.local`:
 
-- `MSGRAPH_TENANT_ID`: seteado
-- `MSGRAPH_CLIENT_ID`: seteado
-- `MSGRAPH_CLIENT_SECRET`: pendiente
-- `MSGRAPH_SENDER`: pendiente
+- `R2_ACCOUNT_ID` o `R2_ENDPOINT`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_REGION` opcional
+
+Los adjuntos tecnicos, selfies y firmas no usan URL publica. Si existe `R2_PUBLIC_BASE_URL` para otro uso futuro, no debe aplicarse a archivos sensibles.
+
+Tambien se aceptan los nombres actuales de Cloudflare:
+
+- `CLOUDFLARE_S3_URL`
+- `CLOUDFLARE_R2_ACCESS_KEY_ID`
+- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
+- `CLOUDFLARE_R2_BUCKET`
 
 ## Flujo funcional real
 
-1. Backend solicita token con `client_credentials`.
-2. Backend arma mensaje HTML con:
-- logo inline (`cid:cmcing-logo`)
-- tabla/resumen
-- tarjetas con imagenes de producto
-3. Backend adjunta PDF generado del informe.
-4. Backend llama `sendMail` y devuelve resultado al front.
+1. Backend pide token con `client_credentials`.
+2. Backend arma HTML con logo inline.
+3. Backend genera PDF:
+   - informes de visitas/facturacion,
+   - cotizaciones.
+4. Backend adjunta PDF y llama `sendMail`.
 
 ## Decisiones tecnicas vigentes
 
-- Uso de permisos de aplicacion (app-only), no delegated flow.
-- Mismo endpoint de envio para ambos informes (`visitas` y `facturacion`).
-- Branding unificado (logo + estilo HTML) para todos los correos.
+- No se usa SMTP.
+- No se usa Graph para login.
+- Correos HTML mantienen branding y adjunto PDF.
+- Cotizaciones comparten helpers de reporting.
 
 ## Riesgos y bugs conocidos
 
-- Si faltan permisos `Mail.Send` de aplicacion o consentimiento admin, fallara el envio.
-- Si `MSGRAPH_SENDER` no corresponde a mailbox valida/autorizada, Graph responde error.
-- Algunos clientes de correo pueden bloquear imagenes inline por politicas del destinatario.
-
-## Workarounds actuales
-
-- El endpoint retorna mensaje de error textual de Graph para diagnostico rapido.
-- Se puede probar primero con destinatarios internos.
+- QA 2026-05-29 envio informes de visitas y facturacion por Graph a `carlos@prof3sional.com` correctamente.
+- QA 2026-05-29 envio cotizacion `COT-2026-000003` por Graph a `carlos@prof3sional.com` correctamente.
+- Requiere permiso `Mail.Send` de aplicacion y consentimiento admin.
+- Algunos clientes pueden bloquear imagenes inline.
 
 ## Pendientes reales y proximos pasos
 
-- Completar `MSGRAPH_CLIENT_SECRET` y `MSGRAPH_SENDER`.
-- Probar envio E2E con cuenta interna de validacion.
-- Definir trazabilidad minima de envio (log de exito/fallo).
-
-## Notas para presentacion y onboarding
-
-- El sistema ya esta preparado para "correo corporativo con adjunto" sin usar SMTP manual.
-- La seguridad queda centralizada en Entra ID + Graph API.
+- Persistir bitacora de correos enviados.

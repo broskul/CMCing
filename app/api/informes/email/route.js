@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getInformeFacturacion, getInformeVisitas } from '../../../lib/cmms-store';
+import { getInformeFacturacion, getInformeVisitas } from '../../../lib/supabase-store';
 import {
   buildEmailHtml,
   createFacturacionPdf,
@@ -67,7 +67,7 @@ export async function POST(request) {
           </table>
         `,
         productos: productAssets,
-        footer: 'Correo emitido por CMCing CMMS.',
+        footer: 'Correo emitido por CMCing.',
       });
 
       const attachments = [
@@ -125,7 +125,7 @@ export async function POST(request) {
         </table>
       `,
       productos: productAssets,
-      footer: 'Correo emitido por CMCing CMMS.',
+      footer: 'Correo emitido por CMCing.',
     });
 
     const attachments = [
@@ -141,7 +141,7 @@ export async function POST(request) {
     await sendMailByGraph({
       to,
       cc,
-      subject: 'Informe de Facturacion CMCing',
+      subject: 'Informe de Facturación CMCing',
       html,
       attachments,
     });

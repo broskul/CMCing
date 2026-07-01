@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getInformeFacturacion } from '../../../lib/cmms-store';
+import { getInformeFacturacion } from '../../../lib/supabase-store';
 
 export async function GET(request) {
   try {

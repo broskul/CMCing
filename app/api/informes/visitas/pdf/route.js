@@ -1,4 +1,4 @@
-import { getInformeVisitas } from '../../../../lib/cmms-store';
+import { getInformeVisitas } from '../../../../lib/supabase-store';
 import { createVisitasPdf } from '../../../../lib/reporting';
 
 export async function GET(request) {

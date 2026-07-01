@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { deleteEquipo, getEquipo, updateEquipo } from '../../../lib/cmms-store';
+import { deleteEntity, getEquipo, updateEntity } from '../../../lib/supabase-store';
 
 export async function GET(request, { params }) {
   try {
@@ -18,7 +18,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const equipo = await updateEquipo(id, body);
+    const equipo = await updateEntity('equipos', id, body);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
@@ -31,7 +31,7 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
-    const deleted = await deleteEquipo(id);
+    const deleted = await deleteEntity('equipos', id);
     if (!deleted) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }

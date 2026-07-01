@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"/><title>Informe Técnico QA IT_2026 3659</title><style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #111827; }
+    .report-root { width: 210mm; min-height: 297mm; margin: 0 auto; background: #ffffff; }
+    .tech-page { min-height: 297mm; padding: 10mm 12mm 7mm; background: #ffffff; color: #111827; position: relative; }
+    .tech-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .tech-header img { width: 178px; height: auto; object-fit: contain; }
+    .tech-code { text-align: right; font-size: 14px; line-height: 1.35; color: #111827; font-weight: 700; margin-top: 18mm; }
+    .tech-address { margin: 20px 0 8px 12mm; font-size: 14px; line-height: 1.45; font-weight: 700; }
+    .tech-line { border-top: 3px solid #d8d8d8; margin: 6px 0 12px; }
+    .tech-title { margin: 0 0 14px; text-align: center; font-size: 28px; line-height: 1; font-weight: 800; letter-spacing: 0; }
+    .equipment-heading { margin: 0 0 12px; font-size: 14px; font-weight: 800; }
+    .tech-grid { display: grid; grid-template-columns: 1fr 50mm; gap: 10px; align-items: start; }
+    .tech-meta { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tech-meta td { border: 0; padding: 2px 5px 2px 0; vertical-align: top; background: #ffffff; color: #111827; font-size: 14px; }
+    .tech-meta td.label { width: 46mm; font-weight: 700; background: #ffffff; }
+    .tech-photo { background: #ffffff; min-height: 34mm; display: flex; align-items: center; justify-content: center; padding: 2px; }
+    .tech-photo img { width: 100%; max-height: 42mm; object-fit: contain; }
+    .classic-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    .classic-table td { border: 1px solid #a9a9a9; padding: 3px 6px; vertical-align: top; }
+    .classic-table .label-row { font-weight: 700; }
+    .section-bar { margin-top: 12px; border-bottom: 1px solid #cfcfcf; background: #eeeeee; padding: 4px 6px; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+    .tech-body { margin-top: 8px; font-size: 13px; line-height: 1.36; white-space: pre-line; }
+    .checkline { display: grid; grid-template-columns: 18px 1fr 54px; align-items: center; gap: 8px; margin-top: 7px; font-size: 13px; }
+    .checkbox-mark { width: 7px; height: 7px; border: 1px solid #111827; }
+    .xbox { border: 1px solid #6b7280; padding: 2px 0; text-align: center; font-weight: 800; }
+    .measurement-table, .codes-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+    .measurement-table th, .measurement-table td, .codes-table td { border: 1px solid #a9a9a9; padding: 5px 6px; vertical-align: top; }
+    .measurement-table th, .codes-table td:first-child { background: #eeeeee; font-weight: 800; }
+    .certificate-list { margin-top: 8px; font-size: 12px; line-height: 1.5; }
+    .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    .signature-box { min-height: 64px; border-top: 1px solid #9ca3af; padding-top: 6px; font-size: 11px; white-space: pre-line; }
+    .tech-footer { position: absolute; left: 12mm; right: 12mm; bottom: 7mm; border-top: 2px solid #9ca3af; padding-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px; color: #111827; }
+  </style></head>
+<body>
+  <div class="report-root">
+    <section class="tech-page">
+      <div class="tech-header">
+        <img src="file:///Users/carlosrodriguezsilva/Desktop/Desarrollos/CMCing/public/brand/logo-cmcing.png" alt="CMCiing" />
+        <div class="tech-code">Puerto Varas, 24 de Febrero de 2026<br/>IT_2026 3659 / AQUAGESTION S.A.</div>
+      </div>
+      <div class="tech-address">
+        Sres. AQUAGESTION S.A.<br/>
+        Ruta 5 Sur Km 1008 - Puerto Varas.<br/>
+        Att. : Andrea Imio<br/>
+        Ref. : Informe Técnico de Mantención Preventiva para Termociclador.
+      </div>
+      <div class="tech-line"></div>
+      <h1 class="tech-title">INFORME TÉCNICO</h1>
+      <p class="equipment-heading">DATOS DEL EQUIPO</p>
+      <div class="tech-grid">
+        <table class="tech-meta"><tbody>
+          <tr><td class="label">EQUIPO</td><td>Termociclador</td></tr>
+          <tr><td class="label">MARCA</td><td>Agilent Tecnologies</td></tr>
+          <tr><td class="label">MODELO</td><td>Aria MX</td></tr>
+          <tr><td class="label">N° SERIE</td><td>MY15075214</td></tr>
+          <tr><td class="label">Nº IDENTIFICACIÓN</td><td>EQ-BM-68</td></tr>
+          <tr><td class="label">UBICACIÓN</td><td>Sala de equipos - Área de microbiología</td></tr>
+        </tbody></table>
+        <div class="tech-photo"><img src="file:///Users/carlosrodriguezsilva/Desktop/Desarrollos/CMCing/public/productos/qa-termociclador-ref.png" alt="Equipo" /></div>
+      </div>
+      <table class="classic-table"><tbody>
+        <tr><td class="label-row">OBJETIVO</td></tr>
+        <tr><td>- Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica.</td></tr>
+        <tr><td class="label-row">ESPECIFICACIONES</td></tr>
+        <tr><td>- Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos son los mismos para el proceso.</td></tr>
+      </tbody></table>
+      <div class="section-bar">I. TRABAJOS REALIZADOS Y REPORTES</div>
+      <div class="tech-body">2.1 Desarme y limpieza de partes y piezas:
+• Comandos de módulo de control
+• Bloque calefactor Peltier (Porta muestras)
+• Calefactor y sistema de cierre de puerta
+• Sensores de temperatura (PT100)
+• Tarjetas electrónicas
+• Estructura y accesorios
+
+2.2 Revisión y verificación de partes y piezas:
+• Verificación de aislación de sistemas Peltier
+• Verificación de sensores de temperatura
+• Verificación de seguridad sobre temperatura
+• Verificación de fugas eléctricas
+• Lubricación de partes móviles
+• Ajuste de cierre de puerta
+• Medición de temperatura contrastado con instrumento certificado
+
+Observaciones correctivas:
+Bloque porta placa presenta topes de sujeción de tornillos inexistentes; se sugiere reemplazo para evitar tiempos de detención.</div>
+      <div class="section-bar">II. ESTADO INICIAL</div>
+      <div class="checkline"><span class="checkbox-mark"></span><span>Chequeo primario de funcionamiento</span><span class="xbox">X</span></div><div class="checkline"><span class="checkbox-mark"></span><span>Chequeo estructural, accesorios y componentes</span><span class="xbox">X</span></div><div class="checkline"><span class="checkbox-mark"></span><span>Chequeo de controles y comandos</span><span class="xbox">X</span></div><div class="checkline"><span class="checkbox-mark"></span><span>Chequeo de conexiones eléctricas</span><span class="xbox">X</span></div>
+      <div class="section-bar">III. REPORTES DE MEDICIÓN</div>
+      <table class="measurement-table"><thead><tr><th>Variable de medición</th><th>Programado</th><th>Observado</th><th>Diferencia</th><th>Cumple</th><th>Criterio de aceptación</th></tr></thead><tbody>
+    <tr>
+      <td>Temperatura °C</td>
+      <td>55</td>
+      <td>55.10</td>
+      <td>- 0.10</td>
+      <td>Si</td>
+      <td>Los valores individuales de operación deben encontrase en ± 1°C.</td>
+    </tr>
+  
+    <tr>
+      <td>Temperatura °C</td>
+      <td>60</td>
+      <td>59.80</td>
+      <td>+ 0.20</td>
+      <td>Si</td>
+      <td>Los valores individuales de operación deben encontrase en ± 1°C.</td>
+    </tr>
+  
+    <tr>
+      <td>Temperatura °C</td>
+      <td>90</td>
+      <td>90.10</td>
+      <td>- 0.10</td>
+      <td>Si</td>
+      <td>Los valores individuales de operación deben encontrase en ± 1°C.</td>
+    </tr>
+  
+    <tr>
+      <td>Temperatura °C</td>
+      <td>95</td>
+      <td>95.00</td>
+      <td>0</td>
+      <td>Si</td>
+      <td>Los valores individuales de operación deben encontrase en ± 1°C.</td>
+    </tr>
+  </tbody></table>
+      <div class="section-bar">IV. CONSIDERACIONES</div>
+      <div class="certificate-list">▪ Este documento certifica la verificación de los instrumentos individualizados, los cuales fueron verificados y certificados con instrumental calibrado en oficinas autorizadas para realizar este servicio.<br/>▪ Para el presente servicio se utilizó sistema termométrico digital con sensor PT100 certificado, marca WIKA, modelo CTH6200, Número de serie 42502980, correspondiente al certificado SMD-80116, sello calibración B-147147 (Indicador), B-147148 (Sensor).<br/>▪ Equipo responde satisfactoriamente a las exigencias de estándares establecidos en Normativa.</div>
+      <div class="section-bar">V. CÓDIGO INSTRUMENTO Y CÓDIGO DEL SERVICIO</div>
+      <table class="codes-table"><tbody><tr><td>CÓDIGO INSTRUMENTO</td><td>WIKA CTH6200 / Serie 42502980 / Certificado SMD-80116</td></tr><tr><td>CÓDIGO DEL SERVICIO</td><td>IT_2026 3659</td></tr></tbody></table>
+      <div class="signature-grid"><div class="signature-box">Ing. Cristián Manzor
+Nombre y Firma Responsable</div><div class="signature-box">TRABAJO REALIZADO</div></div>
+      <div class="tech-footer"><div><strong>CMC Ingeniería y Servicios.</strong><br/>Beauchef 1699 - Santiago</div><div style="text-align:right;">Fono: (56-9) 77667626<br/>Web: www.cmcing.cl</div></div>
+    </section>
+  </div>
+</body>
+</html>

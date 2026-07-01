@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createVendedor, listVendedores } from '../../lib/cmms-store';
+import { createEntity, listVendedores } from '../../lib/supabase-store';
 
 export async function GET() {
   try {
@@ -12,7 +12,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const vendedor = await createVendedor(body);
+    const vendedor = await createEntity('vendedores', body);
     return NextResponse.json(vendedor, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

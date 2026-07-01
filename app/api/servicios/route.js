@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServicio, listServicios } from '../../lib/cmms-store';
+import { createEntity, listServicios } from '../../lib/supabase-store';
 
 export async function GET() {
   try {
@@ -12,7 +12,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const servicio = await createServicio(body);
+    const servicio = await createEntity('servicios', body);
     return NextResponse.json(servicio, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

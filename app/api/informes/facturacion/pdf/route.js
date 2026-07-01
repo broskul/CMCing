@@ -1,4 +1,4 @@
-import { getInformeFacturacion } from '../../../../lib/cmms-store';
+import { getInformeFacturacion } from '../../../../lib/supabase-store';
 import { createFacturacionPdf } from '../../../../lib/reporting';
 
 export async function GET(request) {

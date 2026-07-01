@@ -2,60 +2,98 @@
 
 ## Estado vigente
 
-Ultima actualizacion: 2026-04-17.
-Integracion de base de datos productiva (Supabase/Postgres via Prisma) desactivada para modo demo.
+Ultima actualizacion: 2026-06-27.
+El runtime de la app opera directo contra Supabase usando `@supabase/supabase-js`. La capa en memoria fue retirada del runtime y `app/lib/demo-store.js` fue eliminado.
 
 ## Objetivo del modulo
 
-Definir estado de desacople actual y camino de reconexion cuando se pase a produccion.
+Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizaciones, auth directa, cola offline, firmas y adjuntos R2.
 
 ## Fuentes de verdad y sistemas externos
 
-- Esquema historico con Prisma:
+- Cliente Supabase server-side:
+  - `app/lib/supabase-server.js`
+- Repositorio de datos runtime:
+  - `app/lib/supabase-store.js`
+- Esquema Prisma de referencia:
   - `prisma/schema.prisma`
-  - `schema.sql`
-- Cliente Prisma existente:
-  - `app/lib/prisma.js`
+- Migraciones Supabase:
+  - `supabase/migrations/20260529131254_cmms_mvp.sql`
+  - `supabase/migrations/20260529144500_offline_auth_r2.sql`
 
-Nota: estos archivos existen, pero no son fuente activa en runtime demo.
+## Proyecto activo
 
-## Flujo funcional real (hoy)
+- Proyecto nuevo: `vgfoubwwxqkrtpymzbat`
+- URL productiva: `https://vgfoubwwxqkrtpymzbat.supabase.co`
+- Plan: `Free`
+- La estructura base ya fue aplicada en este proyecto nuevo desde el SQL Editor.
+- Los usuarios de `Usuario` tambien se migraron, preservando `id`, hash y timestamps.
 
-- Las APIs de negocio ya no consultan Prisma.
-- Todas las rutas usan `app/lib/demo-store.js`.
-- `DATABASE_URL` no es requisito para operar demo.
+## Modelo vigente considerado
+
+- `Usuario`: login directo con password hash y roles.
+- `Cliente`, `Equipo`, `Servicio`, `Tecnico`, `Vendedor`, `Visita`: maestros y operacion.
+- `Equipo.sku`, `serial`, `nombre`: busqueda principal.
+- `EquipoHojaVida`: trazabilidad de vida del equipo.
+- `Cotizacion` y `CotizacionItem`: cotizador simple con PDF/mail.
+- `Actividad` y `VisitaActividad`: actividades por visita.
+- `ArchivoAdjunto`: evidencias, firma y selfie guardadas en R2.
+- `ColaSincronizacion`: idempotencia y trazabilidad de cargas offline.
+
+## Flujo funcional real hoy
+
+- Todas las APIs de negocio importan `app/lib/supabase-store.js`.
+- `supabase-store` conserva la forma de respuesta esperada por la UI y resuelve relaciones en servidor.
+- `listEquipos()` entrega cada equipo con cliente, visitas enriquecidas con servicio/tecnico/cliente, servicios relacionados agrupados y hoja de vida con referencias navegables para la vista 360.
+- `supabase-store` tolera migraciones parciales para QA: tablas opcionales ausentes devuelven arreglos vacios y columnas nuevas faltantes se omiten al escribir.
+- Si RLS bloquea `VisitaEquipo`, la visita queda asociada por la columna legacy `Visita.equipoId`.
+- CRUD de maestros escribe en tablas reales de Supabase.
+- Cotizaciones escriben cabecera en `Cotizacion` e items en `CotizacionItem`.
+- Visitas con multiples equipos escriben `Visita` y sincronizan `VisitaEquipo`.
+- La app tecnica mantiene cola local IndexedDB y al volver conexion llama `/api/tecnico/sync`.
+- `/api/tecnico/sync` crea `ColaSincronizacion`, sube adjuntos privados a R2, crea `ArchivoAdjunto`, actualiza firma del tecnico y marca la visita sincronizada.
+- `/api/r2/private` entrega objetos R2 solo dentro de sesion autenticada cuando la UI necesita renderizar firma/selfie/evidencias en informes.
+
+## Configuracion vigente
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` recomendado para APIs server.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` se usa como fallback server-side cuando no existe service role y las politicas/tablas lo permiten.
+
+La URL local quedo apuntando a `https://vgfoubwwxqkrtpymzbat.supabase.co`. En esta etapa el proyecto nuevo ya tiene el esquema y los usuarios base; si se activa RLS, hay que configurar politicas o agregar service role.
 
 ## Decisiones tecnicas vigentes
 
-- Prioridad actual: demo estable y rapida para presentacion.
-- Persistencia real se posterga para fase produccion.
-- No se elimina Prisma del repo todavia, queda como base de reconexion.
+- El servidor prefiere service role para evitar depender de politicas RLS durante esta etapa productiva inicial.
+- Si no hay service role, usa anon key como fallback para permitir QA con tablas abiertas.
+- Si ambas llaves faltan o parecen placeholder, la app falla con error explicito.
+- La compatibilidad con migraciones parciales es temporal para QA; el objetivo productivo sigue siendo ejecutar todas las migraciones.
+- La migracion a `vgfoubwwxqkrtpymzbat` dejo la estructura lista sin datos de negocio; solo se migraron los usuarios de `Usuario`.
+- Offline se modela con cola local en cliente + `ColaSincronizacion` server-side.
+- El payload offline y `ColaSincronizacion` usan `clientMutationId`; la tabla `Visita` del proyecto actual usa la columna `clienteMutationId`. `supabase-store` acepta ambos nombres y normaliza la respuesta con alias `clientMutationId` para la app tecnica.
+- Adjuntos no se guardan en Postgres: solo metadata, bucket, key y checksum. `publicUrl` queda nulo para adjuntos privados; si se necesita render en UI se usa `/api/r2/private`.
+- Firmas de tecnicos se guardan separadas bajo `private/firmas/tecnicos/{tecnicoId}`; evidencias y selfies quedan bajo `private/servicios/{clientMutationId}`.
+- `sku` no es unico porque puede representar familia/producto; `serial` y `codigoInterno` mantienen unicidad.
+- En free tier conviene asumir menos margen para extras de plataforma y evitar depender de conexiones directas innecesarias.
 
 ## Riesgos y bugs conocidos
 
-- Deriva funcional: demo y futura produccion pueden separarse si no se controla.
-- Si alguien asume persistencia real en demo, puede perder cambios al reiniciar.
-
-## Workarounds actuales
-
-- Contexto explicito en UI indicando modo demo en memoria.
-- Documentar este estado en ContextIA para evitar confusiones.
-
-## Plan de reconexion (produccion)
-
-1. Definir feature flag de entorno (`APP_MODE=demo|prod`).
-2. Reintroducir repositorio DB para APIs (Prisma/Supabase).
-3. Validar migraciones y seed de entorno real.
-4. Ejecutar smoke tests CRUD + informes + correo sobre datos reales.
-5. Mantener fallback demo para presentaciones.
+- Las pruebas E2E dependen de que anon tenga permisos o de configurar service role real.
+- La DB activa ya expone `Usuario`, `ArchivoAdjunto`, `ColaSincronizacion` y columnas nuevas de tecnicos para login/offline.
+- QA 2026-05-29 con anon key: permite crear `Cliente`, `Vendedor`, `Tecnico`, `Servicio`, `Equipo` y `Visita`; bloquea por RLS inserts en `Actividad`, `Cotizacion`, `VisitaEquipo` y trigger de `EquipoHojaVida` al completar visitas.
+- QA 2026-05-29 con service role: ya permite crear `Actividad`, `Visita` completada, `VisitaEquipo` y hoja de vida; `CotizacionItem.lineaTotal` se omite en insert porque la DB lo calcula como columna generada.
+- QA 2026-05-29 con service role completo: creo cliente, vendedor, tecnico Cristian Manzor, servicio, actividad, equipo, visita completada y cotizacion `COT-2026-000003`; genero PDFs y envio correos.
+- QA 2026-05-29 offline/R2: creo datos frescos, cotizacion `COT-FIX-20260530000428`, visita `6`, subio 4 adjuntos a R2 (`evidencia_foto`, `evidencia_pdf`, `firma_tecnico`, `selfie_firma`), actualizo firma completa de Cristian Manzor y valido reintento idempotente con respuesta `duplicate`.
+- Decision posterior 2026-05-29: adjuntos, selfies y firmas deben ser privados. El codigo ya no genera URL publica aunque exista `R2_PUBLIC_BASE_URL`; guarda referencias `r2://...` o `r2Key` y renderiza solo via endpoint autenticado.
+- QA privacidad R2 2026-05-29: visita `7` sincronizada con `selfieAdjuntoId`, 4 adjuntos con `publicUrl = null`, prefijos `private/`, endpoint privado `200` con sesion y `401` sin sesion. Se limpiaron 8 `publicUrl` heredadas en `ArchivoAdjunto`.
+- Login real ya funciona despues de ejecutar la migracion auth/offline y configurar `SUPABASE_SERVICE_ROLE_KEY` del proyecto nuevo.
+- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
+- Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
 
 ## Pendientes reales y proximos pasos
 
-- Implementar capa repositorio con interfaz comun (demo vs db).
-- Agregar tests de paridad entre implementacion demo y prod.
-- Depurar dependencias Prisma no usadas cuando cierre migracion.
-
-## Notas para presentacion y onboarding
-
-- Mensaje oficial actual: "Demo desconectada de Supabase por decision temporal".
-- Mensaje oficial futuro: "Produccion se reconecta por feature flag, sin rehacer UI".
+- Ejecutar migraciones en Supabase del proyecto productivo/staging.
+- Mantener al menos un usuario admin activo en `Usuario`.
+- Definir permisos por rol en endpoints CRUD.
+- Definir politicas de retencion de adjuntos R2.

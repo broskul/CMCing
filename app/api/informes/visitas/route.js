@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getInformeVisitas } from '../../../lib/cmms-store';
+import { getInformeVisitas } from '../../../lib/supabase-store';
 
 export async function GET(request) {
   try {
