@@ -1,0 +1,3 @@
+-- Seed intencionalmente vacío.
+-- Los catálogos base versionados se crean desde las migraciones para que el
+-- mismo esquema sea reproducible en desarrollo, preview y producción.

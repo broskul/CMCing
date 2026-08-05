@@ -1,86 +1,108 @@
-const DB_NAME = 'cmcing-offline';
-const DB_VERSION = 1;
-const STORE_NAME = 'syncJobs';
+'use client';
 
-function openOfflineDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+import {
+  completeOutboxEntry,
+  computeOfflineRetryDelay,
+  createOfflineUuid,
+  enqueueOutbox,
+  initializeOfflineStorage,
+  listOutboxEntries,
+  requireOfflineUser,
+  updateOutboxEntry,
+} from './offline';
 
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('status', 'status');
-        store.createIndex('createdAt', 'createdAt');
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function resolveLegacyOptions(options = {}) {
+  if (options.userId) return options;
+  const user = await requireOfflineUser();
+  await initializeOfflineStorage(user);
+  return { ...options, userId: user.id };
 }
 
-async function withStore(mode, callback) {
-  const db = await openOfflineDb();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode);
-    const store = transaction.objectStore(STORE_NAME);
-    const result = callback(store);
-
-    transaction.oncomplete = () => {
-      db.close();
-      resolve(result);
-    };
-    transaction.onerror = () => {
-      db.close();
-      reject(transaction.error);
-    };
-  });
+function toLegacyStatus(status) {
+  if (status === 'running') return 'syncing';
+  if (status === 'failed' || status === 'blocked') return 'error';
+  return 'pending';
 }
 
-export async function enqueueSyncJob(payload) {
-  const now = new Date().toISOString();
-  const job = {
-    id: payload.clientMutationId || crypto.randomUUID(),
-    status: 'pending',
-    attempts: 0,
-    createdAt: now,
-    updatedAt: now,
-    payload,
+function toLegacyJob(record) {
+  return {
+    id: record.id,
+    status: toLegacyStatus(record.status),
+    attempts: record.attempts || 0,
+    createdAt: new Date(record.createdAt).toISOString(),
+    updatedAt: new Date(record.updatedAt).toISOString(),
+    error: record.lastError || '',
+    payload: record.payload,
+    dependsOn: record.dependsOn || [],
+    baseRevision: record.baseRevision ?? null,
+    idempotencyKey: record.idempotencyKey,
   };
-
-  await withStore('readwrite', (store) => store.put(job));
-  return job;
 }
 
-export async function listSyncJobs() {
-  return withStore('readonly', (store) => new Promise((resolve, reject) => {
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
-    request.onerror = () => reject(request.error);
-  }));
+export async function enqueueSyncJob(payload, options = {}) {
+  const scopedOptions = await resolveLegacyOptions(options);
+  const clientMutationId = payload?.clientMutationId || createOfflineUuid();
+  const record = await enqueueOutbox({
+    id: clientMutationId,
+    clientMutationId,
+    idempotencyKey: scopedOptions.idempotencyKey || clientMutationId,
+    operation: scopedOptions.operation || 'legacy.technician-sync',
+    entity: scopedOptions.entity || 'visita',
+    entityId: scopedOptions.entityId,
+    payload: { ...payload, clientMutationId },
+    dependsOn: scopedOptions.dependsOn || payload?.dependsOn || [],
+    baseRevision: scopedOptions.baseRevision ?? payload?.baseRevision ?? null,
+  }, scopedOptions);
+  const [hydrated] = await listOutboxEntries({
+    userId: record.userId,
+    rehydrate: 'data-url',
+    statuses: [record.status],
+  }).then((records) => records.filter((item) => item.id === record.id));
+  return toLegacyJob(hydrated || record);
 }
 
-export async function updateSyncJob(id, patch) {
-  return withStore('readwrite', (store) => new Promise((resolve, reject) => {
-    const getRequest = store.get(id);
-    getRequest.onsuccess = () => {
-      const current = getRequest.result;
-      if (!current) {
-        resolve(null);
-        return;
-      }
-
-      const next = { ...current, ...patch, updatedAt: new Date().toISOString() };
-      const putRequest = store.put(next);
-      putRequest.onsuccess = () => resolve(next);
-      putRequest.onerror = () => reject(putRequest.error);
-    };
-    getRequest.onerror = () => reject(getRequest.error);
-  }));
+export async function listSyncJobs(options = {}) {
+  const scopedOptions = await resolveLegacyOptions(options);
+  const records = await listOutboxEntries({
+    userId: scopedOptions.userId,
+    rehydrate: 'data-url',
+    statuses: ['pending', 'running', 'failed', 'blocked'],
+  });
+  return records.map(toLegacyJob);
 }
 
-export async function deleteSyncJob(id) {
-  return withStore('readwrite', (store) => store.delete(id));
+export async function updateSyncJob(id, patch, options = {}) {
+  const scopedOptions = await resolveLegacyOptions(options);
+  const status = patch.status === 'syncing'
+    ? 'running'
+    : patch.status === 'error'
+      ? 'failed'
+      : patch.status === 'pending'
+        ? 'pending'
+        : undefined;
+  const attempts = patch.attempts === undefined ? undefined : Number(patch.attempts);
+  const nextAttemptAt = status === 'failed'
+    ? Date.now() + computeOfflineRetryDelay(Math.max(1, attempts || 1))
+    : patch.nextAttemptAt;
+  const record = await updateOutboxEntry(id, {
+    ...(status ? { status } : {}),
+    ...(attempts === undefined ? {} : { attempts }),
+    ...(nextAttemptAt === undefined ? {} : { nextAttemptAt }),
+    ...(patch.error === undefined ? {} : { lastError: String(patch.error || '') }),
+    ...(status === 'running' ? { leaseUntil: Date.now() + 60_000 } : {}),
+    ...(status === 'failed' || status === 'pending' ? { leaseUntil: null } : {}),
+  }, scopedOptions);
+  if (!record) return null;
+  const [hydrated] = await listOutboxEntries({ userId: record.userId, rehydrate: 'data-url' })
+    .then((records) => records.filter((item) => item.id === record.id));
+  return toLegacyJob(hydrated || record);
 }
+
+// The historical caller only invokes delete after the server acknowledged the mutation.
+// A compact completion marker is retained so dependsOn can distinguish success from discard.
+export async function deleteSyncJob(id, options = {}) {
+  const scopedOptions = await resolveLegacyOptions(options);
+  return completeOutboxEntry(id, scopedOptions);
+}
+
+export * from './offline';

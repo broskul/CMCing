@@ -10,8 +10,22 @@ const montserrat = Montserrat({
 });
 
 export const metadata = {
-  title: 'CMCiing - Gestión de Servicios Médicos',
-  description: 'Aplicación para gestionar visitas y servicios técnicos de equipos médicos',
+  title: {
+    default: 'CMCing 360 · Servicio técnico',
+    template: '%s · CMCing 360',
+  },
+  description: 'Órdenes de trabajo, actividades, cumplimiento e informes de servicio técnico',
+  applicationName: 'CMCing 360',
+  manifest: '/manifest.webmanifest',
+  robots: { index: false, follow: false },
+};
+
+export const viewport = {
+  themeColor: '#0f2237',
+  colorScheme: 'light',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {

@@ -1,10 +1,10 @@
 import crypto from 'crypto';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 let cachedClient = null;
 
 function getR2Config() {
-  const accountId = process.env.R2_ACCOUNT_ID;
+  const accountId = process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID;
   const endpoint = process.env.R2_ENDPOINT
     || process.env.CLOUDFLARE_S3_URL
     || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
@@ -15,7 +15,7 @@ function getR2Config() {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
     bucket: process.env.R2_BUCKET || process.env.CLOUDFLARE_R2_BUCKET,
-    publicBaseUrl: process.env.R2_PUBLIC_BASE_URL,
+    publicBaseUrl: process.env.R2_PUBLIC_BASE_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL,
     region: process.env.R2_REGION || 'auto',
   };
 }
@@ -74,6 +74,36 @@ export function buildR2Key({ prefix = 'servicios', filename = 'adjunto.bin', ext
   return `${prefix}/${stamp}-${random}-${cleanFilename}${suffix}`;
 }
 
+export function buildDeterministicR2Key({ prefix = 'private/servicios', clientActionId, checksumSha256, filename = 'adjunto.bin' }) {
+  const actionId = String(clientActionId || '').trim().toLowerCase();
+  const checksum = String(checksumSha256 || '').trim().toLowerCase();
+  if (!/^[0-9a-f-]{16,64}$/.test(actionId)) throw new Error('clientActionId inválido para R2.');
+  if (!/^[0-9a-f]{64}$/.test(checksum)) throw new Error('Checksum SHA-256 inválido para R2.');
+
+  const cleanFilename = String(filename)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase() || 'adjunto.bin';
+
+  return `${String(prefix).replace(/^\/+|\/+$/g, '')}/${actionId}/${checksum}-${cleanFilename}`;
+}
+
+export function detectImageMimeType(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '';
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (buffer.subarray(0, 6).toString('ascii') === 'GIF87a' || buffer.subarray(0, 6).toString('ascii') === 'GIF89a') return 'image/gif';
+  return '';
+}
+
+export function sha256Buffer(buffer) {
+  if (!Buffer.isBuffer(buffer)) throw new Error('Se esperaba un Buffer para calcular SHA-256.');
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
 export function buildPrivateR2Url({ bucket, key }) {
   return `r2://${bucket}/${key}`;
 }
@@ -101,7 +131,7 @@ export async function uploadBufferToR2({ buffer, key, contentType }) {
   const config = getR2Config();
   assertR2Config(config);
 
-  const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+  const checksumSha256 = sha256Buffer(buffer);
   const client = getClient(config);
 
   await client.send(new PutObjectCommand({
@@ -123,6 +153,12 @@ export async function uploadBufferToR2({ buffer, key, contentType }) {
   };
 }
 
+export async function deleteObjectFromR2({ key }) {
+  const config = getR2Config();
+  assertR2Config(config);
+  await getClient(config).send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+}
+
 export async function getObjectFromR2({ key }) {
   const config = getR2Config();
   assertR2Config(config);
@@ -136,6 +172,27 @@ export async function getObjectFromR2({ key }) {
     buffer: await bodyToBuffer(result.Body),
     contentType: result.ContentType || 'application/octet-stream',
     contentLength: result.ContentLength,
+    etag: result.ETag,
+  };
+}
+
+export async function getObjectStreamFromR2({ key, range }) {
+  const config = getR2Config();
+  assertR2Config(config);
+  const result = await getClient(config).send(new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    ...(range ? { Range: range } : {}),
+  }));
+  const stream = typeof result.Body?.transformToWebStream === 'function'
+    ? result.Body.transformToWebStream()
+    : null;
+  if (!stream) throw new Error('El objeto no expone un stream compatible.');
+  return {
+    stream,
+    contentType: result.ContentType || 'application/octet-stream',
+    contentLength: result.ContentLength,
+    contentRange: result.ContentRange,
     etag: result.ETag,
   };
 }

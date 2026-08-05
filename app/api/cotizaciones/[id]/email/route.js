@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { getCotizacion } from '../../../../lib/supabase-store';
 import { buildEmailHtml, createCotizacionPdf, createMailAssets, money, sendMailByGraph } from '../../../../lib/reporting';
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
@@ -20,13 +29,28 @@ export async function POST(request, { params }) {
     const pdf = await createCotizacionPdf(cotizacion);
     const { attachments: inlineAttachments } = await createMailAssets([]);
 
-    const rows = (cotizacion.items || []).map((item) => `
-      <tr>
-        <td style="padding:7px;border-bottom:1px solid #e5e7eb;">${item.descripcion}</td>
-        <td style="padding:7px;border-bottom:1px solid #e5e7eb;text-align:right;">${item.cantidad}</td>
-        <td style="padding:7px;border-bottom:1px solid #e5e7eb;text-align:right;">${money(item.lineaTotal)}</td>
-      </tr>
-    `).join('');
+    const rows = (cotizacion.items || []).flatMap((item) => {
+      const services = item.servicios?.length ? item.servicios : [{
+        nombre: item.servicio?.descripcion || item.nombre,
+        descripcionDetalle: item.descripcion,
+        cantidad: item.cantidad,
+        lineaTotal: item.lineaTotal,
+      }];
+      const itemName = escapeHtml(item.nombre || 'Ítem');
+      const code = item.codigo ? `<span style="display:inline-block;margin-left:6px;color:#667085;font-size:11px;">${escapeHtml(item.codigo)}</span>` : '';
+
+      return services.map((service) => {
+        const serviceName = escapeHtml(service.nombre || service.servicio?.descripcion || 'Servicio');
+        const description = service.descripcionDetalle ? `<br><span style="color:#667085;font-size:12px;">${escapeHtml(service.descripcionDetalle)}</span>` : '';
+        return `
+          <tr>
+            <td style="padding:7px;border-bottom:1px solid #e5e7eb;"><span style="display:block;color:#667085;font-size:11px;">${itemName}${code}</span><strong>${serviceName}</strong>${description}</td>
+            <td style="padding:7px;border-bottom:1px solid #e5e7eb;text-align:right;">${service.cantidad}</td>
+            <td style="padding:7px;border-bottom:1px solid #e5e7eb;text-align:right;">${money(service.lineaTotal)}</td>
+          </tr>
+        `;
+      });
+    }).join('');
 
     const html = buildEmailHtml({
       logoCid: 'cmcing-logo',
@@ -37,7 +61,7 @@ export async function POST(request, { params }) {
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
             <tr>
-              <th style="text-align:left;padding:7px;border-bottom:1px solid #d1d5db;">Detalle</th>
+              <th style="text-align:left;padding:7px;border-bottom:1px solid #d1d5db;">Ítem, servicio y descripción</th>
               <th style="text-align:right;padding:7px;border-bottom:1px solid #d1d5db;">Cantidad</th>
               <th style="text-align:right;padding:7px;border-bottom:1px solid #d1d5db;">Total</th>
             </tr>

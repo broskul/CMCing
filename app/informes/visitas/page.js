@@ -1,6 +1,7 @@
 'use client';
 
-import Image from 'next/image';
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useMemo, useState } from 'react';
 
 const estadoLabels = {
@@ -63,6 +64,8 @@ const getAssetUrl = (url) => {
   if (typeof window === 'undefined') return url;
   return `${window.location.origin}${url}`;
 };
+
+const getEquipmentImageUrl = (equipo) => getAssetUrl(equipo?.imagenR2Key || equipo?.imagenUrl || '');
 
 const defaultChecklistLabels = [
   'Chequeo primario de funcionamiento',
@@ -554,7 +557,7 @@ const buildTechnicalVisitSection = (visita, index) => {
     ? visita.adjuntos.filter(isReportImageAttachment)
     : [];
   const codigoServicio = reportData.codigoServicio || buildServiceCode(visita);
-  const equipoIdentificacion = primaryEquipo?.codigoInterno || primaryEquipo?.sku || '-';
+  const equipoIdentificacion = primaryEquipo?.codigoInterno || primaryEquipo?.partNumber || '-';
   const measurementRows = reportData.mediciones.length
     ? reportData.mediciones.map((measurement) => `
       <tr>
@@ -712,7 +715,7 @@ const buildTechnicalVisitSection = (visita, index) => {
         </table>
 
         <div class="tech-photo">
-          ${primaryEquipo?.imagenUrl ? `<img src="${escapeHtml(getAssetUrl(primaryEquipo.imagenUrl))}" alt="Equipo" />` : '<span style="font-size:11px;color:#64748b;">Sin imagen</span>'}
+          ${getEquipmentImageUrl(primaryEquipo) ? `<img src="${escapeHtml(getEquipmentImageUrl(primaryEquipo))}" alt="Equipo" />` : '<span style="font-size:11px;color:#64748b;">Sin imagen</span>'}
         </div>
       </div>
 
@@ -1128,8 +1131,8 @@ export default function InformeVisitasPage() {
                         <td className="px-3 py-2 text-[0.88rem]">{visita.cliente?.nombre || '-'}</td>
                         <td className="px-3 py-2 text-[0.88rem]">{getEquiposLabel(visita)}</td>
                         <td className="px-3 py-2 text-[0.88rem]">
-                          {primaryEquipo?.imagenUrl ? (
-                            <Image src={primaryEquipo.imagenUrl} alt={primaryEquipo.nombre || 'Equipo'} width={120} height={70} className="h-14 w-24 rounded-md border border-neutral-200 object-contain" />
+                          {getEquipmentImageUrl(primaryEquipo) ? (
+                            <img src={getEquipmentImageUrl(primaryEquipo)} alt={primaryEquipo.nombre || 'Equipo'} className="h-14 w-24 rounded-md border border-neutral-200 object-contain" />
                           ) : (
                             '-'
                           )}

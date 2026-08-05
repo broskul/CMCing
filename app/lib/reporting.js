@@ -273,25 +273,47 @@ async function createCotizacionPdf(cotizacion) {
 
   y -= 24;
   page.drawRectangle({ x: 30, y: y - 20, width: 535, height: 20, color: rgb(0.94, 0.96, 0.99) });
-  page.drawText('Descripción', { x: 40, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Cant.', { x: 340, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Unitario', { x: 395, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
-  page.drawText('Total', { x: 495, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Ítem / descripción', { x: 40, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Cant.', { x: 325, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Unitario', { x: 370, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Desc.', { x: 445, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
+  page.drawText('Total', { x: 505, y: y - 14, size: 9, font: fonts.fontBold, color: rgb(0.12, 0.16, 0.23) });
   y -= 24;
 
   for (const item of cotizacion.items || []) {
-    if (y < 150) break;
-    page.drawText(String(item.descripcion || '-').slice(0, 58), { x: 40, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-    page.drawText(String(item.cantidad || 0), { x: 345, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-    page.drawText(money(item.precioUnitario), { x: 395, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-    page.drawText(money(item.lineaTotal), { x: 495, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
-    y -= 12;
+    const services = item.servicios?.length ? item.servicios : [{
+      servicioId: item.servicioId,
+      nombre: item.servicio?.descripcion || item.nombre,
+      descripcionDetalle: item.descripcion,
+      cantidad: item.cantidad,
+      precioUnitario: item.precioUnitario,
+      descuentoTipo: item.descuentoTipo,
+      descuentoValor: item.descuentoValor ?? item.descuentoPct,
+      lineaTotal: item.lineaTotal,
+    }];
+
+    for (const service of services) {
+      if (y < 165) break;
+      const itemTitle = `${item.codigo ? `[${item.codigo}] ` : ''}${item.nombre || 'Ítem'} · ${service.nombre || service.servicio?.descripcion || 'Servicio'}`;
+      page.drawText(String(itemTitle).slice(0, 52), { x: 40, y, size: 9, font: fonts.fontBold, color: rgb(0.18, 0.2, 0.25) });
+      page.drawText(String(service.cantidad || 0), { x: 325, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+      page.drawText(money(service.precioUnitario), { x: 370, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+      page.drawText(service.descuentoTipo === 'monto' ? money(service.descuentoValor) : `${service.descuentoValor ?? service.descuentoPct ?? 0}%`, { x: 445, y, size: 8, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+      page.drawText(money(service.lineaTotal), { x: 505, y, size: 9, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+      if (service.descripcionDetalle) {
+        y -= 10;
+        page.drawText(String(service.descripcionDetalle).slice(0, 58), { x: 40, y, size: 8, font: fonts.fontRegular, color: rgb(0.35, 0.38, 0.44) });
+      }
+      y -= 14;
+    }
   }
 
   y -= 4;
   page.drawLine({ start: { x: 360, y }, end: { x: 565, y }, thickness: 1, color: rgb(0.85, 0.87, 0.91) });
   y -= 14;
   page.drawText(`Subtotal: ${money(cotizacion.subtotal)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
+  y -= 14;
+  page.drawText(`Descuento: - ${money(cotizacion.descuentoMonto)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
   y -= 14;
   page.drawText(`IVA: ${money(cotizacion.impuestoMonto)}`, { x: 395, y, size: 10, font: fonts.fontRegular, color: rgb(0.18, 0.2, 0.25) });
   y -= 18;

@@ -11,10 +11,11 @@ export async function GET(request, { params }) {
     }
 
     const pdf = await createCotizacionPdf(cotizacion);
+    const inline = new URL(request.url).searchParams.get('disposition') === 'inline';
     return new NextResponse(pdf, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="cotizacion_${cotizacion.numero || cotizacion.id}.pdf"`,
+        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="cotizacion_${cotizacion.numero || cotizacion.id}.pdf"`,
       },
     });
   } catch (error) {

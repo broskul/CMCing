@@ -1,0 +1,23 @@
+{
+  "id": "/login?source=pwa",
+  "name": "CMCing Servicio Técnico",
+  "short_name": "CMCing",
+  "description": "Gestión de órdenes de trabajo y actividades técnicas CMC.",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "start_url": "/login?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7fa",
+  "theme_color": "#102a43",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/brand/logo-cmcing.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

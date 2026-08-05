@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
-import { destroySession, getCookieOptions, SESSION_COOKIE } from '../../../lib/auth';
+import { createSupabaseServerClient } from '../../../lib/supabase-auth-server';
 
 export async function POST(request) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  destroySession(token);
+  const origin = request.headers.get('origin');
+  if (origin && origin !== request.nextUrl.origin) {
+    return NextResponse.json({ error: 'Origen de solicitud no autorizado.' }, { status: 403 });
+  }
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(SESSION_COOKIE, '', getCookieOptions(0));
+  try {
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // La respuesta sigue siendo idempotente para permitir limpiar sesiones vencidas.
+  }
 
+  const response = NextResponse.json(
+    { ok: true },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
+  response.cookies.set('cmcing_session', '', { path: '/', maxAge: 0 });
   return response;
 }

@@ -5,25 +5,24 @@ const ESTADOS_VISITA = ['pendiente', 'en_progreso', 'completada', 'cancelada'];
 const ENTITY_CONFIG = {
   clientes: {
     table: 'Cliente',
-    writable: ['nombre', 'email', 'telefono', 'direccion'],
+    writable: ['nombre', 'rut', 'email', 'telefono', 'direccion', 'tipoEntidad', 'giro', 'notas'],
+    requiredColumns: ['rut'],
     get: getCliente,
   },
   equipos: {
     table: 'Equipo',
     writable: [
-      'sku',
-      'codigoInterno',
       'nombre',
       'modelo',
       'serial',
+      'partNumber',
+      'ean',
       'categoria',
       'fabricante',
       'ubicacion',
-      'imagenUrl',
       'fechaInstalacion',
       'fechaGarantiaFin',
       'estadoOperativo',
-      'criticidad',
       'ultimaMantencion',
       'proximaMantencion',
       'observaciones',
@@ -94,6 +93,43 @@ const ENTITY_CONFIG = {
     ],
     get: getVisita,
   },
+  camiones: {
+    table: 'Camion',
+    writable: [
+      'patente',
+      'codigoInterno',
+      'marca',
+      'modelo',
+      'anio',
+      'tipo',
+      'largoM',
+      'anchoM',
+      'altoM',
+      'taraKg',
+      'cargaMaxKg',
+      'volumenM3',
+      'propietarioTipo',
+      'propietarioClienteId',
+      'proveedorNombre',
+      'estado',
+      'observaciones',
+    ],
+    get: getCamion,
+  },
+  conductores: {
+    table: 'Conductor',
+    writable: [
+      'nombre',
+      'rut',
+      'telefono',
+      'email',
+      'licencia',
+      'licenciaVence',
+      'estado',
+      'observaciones',
+    ],
+    get: getConductor,
+  },
   cotizaciones: {
     table: 'Cotizacion',
     writable: [
@@ -105,6 +141,8 @@ const ENTITY_CONFIG = {
       'estado',
       'moneda',
       'descuentoGlobalPct',
+      'descuentoGlobalTipo',
+      'descuentoGlobalValor',
       'impuestoPct',
       'subtotal',
       'descuentoMonto',
@@ -161,6 +199,11 @@ const ID_FIELDS = new Set([
   'servicioId',
   'actividadId',
   'responsableTecnicoId',
+  'camionId',
+  'conductorId',
+  'contactoId',
+  'direccionId',
+  'propietarioClienteId',
   'visitaId',
   'visitaActividadId',
   'syncJobId',
@@ -188,6 +231,13 @@ const NUMBER_FIELDS = new Set([
   'costoRepuestos',
   'costo',
   'orden',
+  'anio',
+  'largoM',
+  'anchoM',
+  'altoM',
+  'taraKg',
+  'cargaMaxKg',
+  'volumenM3',
 ]);
 
 const DATE_FIELDS = new Set([
@@ -207,6 +257,7 @@ const DATE_FIELDS = new Set([
   'proximaMantencion',
   'fechaEvento',
   'fechaReal',
+  'licenciaVence',
   'lastLoginAt',
 ]);
 
@@ -268,6 +319,9 @@ function getMissingColumn(error) {
   const postgresMatch = message.match(/column "([^"]+)" of relation/i);
   if (postgresMatch?.[1]) return postgresMatch[1];
 
+  const qualifiedColumnMatch = message.match(/column [^."]+\.([A-Za-z0-9_]+) does not exist/i);
+  if (qualifiedColumnMatch?.[1]) return qualifiedColumnMatch[1];
+
   return null;
 }
 
@@ -293,6 +347,8 @@ function pickWritable(entity, payload) {
       value = normalizeDate(value);
     } else if (BOOLEAN_FIELDS.has(field)) {
       value = normalizeBoolean(value);
+    } else if (field === 'rut') {
+      value = value ? formatRutText(value) : null;
     }
 
     normalized[field] = value;
@@ -322,31 +378,60 @@ function getVisitaEquipoIds(visita, visitaEquipos = []) {
 function calculateCotizacion(cotizacion) {
   const items = Array.isArray(cotizacion.items) ? cotizacion.items : [];
   const normalizedItems = items.map((item, index) => {
-    const cantidad = Number(item.cantidad || 0);
-    const precioUnitario = Number(item.precioUnitario || 0);
-    const descuentoPct = Number(item.descuentoPct || 0);
-    const lineaTotal = Math.round(cantidad * precioUnitario * (1 - descuentoPct / 100));
+    const sourceServices = Array.isArray(item.servicios) && item.servicios.length
+      ? item.servicios
+      : item.servicioId ? [item] : [];
+    const servicios = sourceServices.map((service, serviceIndex) => {
+      const cantidad = Number(service.cantidad || 0);
+      const precioUnitario = Number(service.precioUnitario || 0);
+      const descuentoTipo = service.descuentoTipo === 'monto' ? 'monto' : 'porcentaje';
+      const bruto = Math.round(cantidad * precioUnitario);
+      const descuentoValor = Math.max(0, Number(service.descuentoValor ?? service.descuentoPct ?? 0));
+      const descuentoMonto = descuentoTipo === 'monto'
+        ? Math.min(bruto, descuentoValor)
+        : Math.round(bruto * Math.min(descuentoValor, 100) / 100);
+      const descuentoPct = bruto > 0 ? Math.round((descuentoMonto * 10000) / bruto) / 100 : 0;
+
+      return {
+        ...service,
+        servicioId: service.servicioId ? Number(service.servicioId) : null,
+        descripcionDetalle: String(service.descripcionDetalle ?? service.descripcion ?? '').trim() || null,
+        cantidad,
+        precioUnitario,
+        descuentoTipo,
+        descuentoValor: descuentoTipo === 'monto' ? descuentoValor : Math.min(descuentoValor, 100),
+        descuentoPct,
+        lineaTotal: Math.max(0, bruto - descuentoMonto),
+        orden: Number(service.orden || serviceIndex + 1),
+      };
+    });
+    const lineaTotal = servicios.reduce((sum, service) => sum + service.lineaTotal, 0);
 
     return {
       ...item,
-      cantidad,
-      precioUnitario,
-      descuentoPct,
+      equipoId: item.equipoId ? Number(item.equipoId) : null,
+      servicios,
       lineaTotal,
       orden: Number(item.orden || index + 1),
     };
   });
 
   const subtotal = normalizedItems.reduce((sum, item) => sum + item.lineaTotal, 0);
-  const descuentoGlobalPct = Number(cotizacion.descuentoGlobalPct || 0);
+  const descuentoGlobalTipo = cotizacion.descuentoGlobalTipo === 'monto' ? 'monto' : 'porcentaje';
+  const descuentoGlobalValor = Math.max(0, Number(cotizacion.descuentoGlobalValor ?? cotizacion.descuentoGlobalPct ?? 0));
   const impuestoPct = Number(cotizacion.impuestoPct ?? 19);
-  const descuentoMonto = Math.round(subtotal * (descuentoGlobalPct / 100));
+  const descuentoMonto = descuentoGlobalTipo === 'monto'
+    ? Math.min(subtotal, descuentoGlobalValor)
+    : Math.round(subtotal * Math.min(descuentoGlobalValor, 100) / 100);
+  const descuentoGlobalPct = subtotal > 0 ? Math.round((descuentoMonto * 10000) / subtotal) / 100 : 0;
   const base = subtotal - descuentoMonto;
   const impuestoMonto = Math.round(base * (impuestoPct / 100));
 
   return {
     ...cotizacion,
     items: normalizedItems,
+    descuentoGlobalTipo,
+    descuentoGlobalValor: descuentoGlobalTipo === 'monto' ? descuentoGlobalValor : Math.min(descuentoGlobalValor, 100),
     descuentoGlobalPct,
     impuestoPct,
     subtotal,
@@ -389,6 +474,7 @@ function shortCliente(cliente) {
   return cliente ? {
     id: cliente.id,
     nombre: cliente.nombre,
+    esEmpresaCMCing: Boolean(cliente.esEmpresaCMCing),
     email: cliente.email,
     telefono: cliente.telefono,
     direccion: cliente.direccion,
@@ -398,14 +484,16 @@ function shortCliente(cliente) {
 function shortEquipo(equipo) {
   return equipo ? {
     id: equipo.id,
-    sku: equipo.sku,
     codigoInterno: equipo.codigoInterno,
     nombre: equipo.nombre,
     serial: equipo.serial,
     modelo: equipo.modelo,
+    partNumber: equipo.partNumber,
+    ean: equipo.ean,
     fabricante: equipo.fabricante,
     ubicacion: equipo.ubicacion,
     imagenUrl: equipo.imagenUrl,
+    imagenR2Key: equipo.imagenR2Key,
   } : null;
 }
 
@@ -428,7 +516,50 @@ function shortServicio(servicio) {
     id: servicio.id,
     descripcion: servicio.descripcion,
     precio: Number(servicio.precio || 0),
+    tipo: servicio.tipo,
   } : null;
+}
+
+function shortCamion(camion) {
+  return camion ? {
+    id: camion.id,
+    patente: camion.patente,
+    codigoInterno: camion.codigoInterno,
+    marca: camion.marca,
+    modelo: camion.modelo,
+    tipo: camion.tipo,
+    estado: camion.estado,
+  } : null;
+}
+
+function shortConductor(conductor) {
+  return conductor ? {
+    id: conductor.id,
+    nombre: conductor.nombre,
+    rut: conductor.rut,
+    telefono: conductor.telefono,
+    licencia: conductor.licencia,
+    estado: conductor.estado,
+  } : null;
+}
+
+function normalizeRutText(value) {
+  return String(value || '')
+    .replace(/\./g, '')
+    .replace(/-/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function formatRutText(value) {
+  const clean = normalizeRutText(value);
+  if (clean.length < 2) return String(value || '').trim();
+  return `${clean.slice(0, -1)}-${clean.slice(-1)}`;
+}
+
+function getPrivateFileUrl(adjunto) {
+  if (!adjunto?.r2Key) return adjunto?.publicUrl || adjunto?.url || '';
+  return `/api/r2/private?key=${encodeURIComponent(adjunto.r2Key)}`;
 }
 
 function formatVisita(visita, context) {
@@ -511,6 +642,9 @@ async function insertRow(entity, payload) {
 
     const missingColumn = getMissingColumn(result.error);
     if (missingColumn && missingColumn in nextPayload) {
+      if (config.requiredColumns?.includes(missingColumn)) {
+        throw new Error(`Falta aplicar la migración de base de datos para la columna ${missingColumn}.`);
+      }
       delete nextPayload[missingColumn];
       continue;
     }
@@ -537,6 +671,9 @@ async function updateRow(entity, id, payload) {
 
     const missingColumn = getMissingColumn(result.error);
     if (missingColumn && missingColumn in nextPayload) {
+      if (config.requiredColumns?.includes(missingColumn)) {
+        throw new Error(`Falta aplicar la migración de base de datos para la columna ${missingColumn}.`);
+      }
       delete nextPayload[missingColumn];
       continue;
     }
@@ -586,30 +723,94 @@ async function updateVisita(id, payload) {
 }
 
 async function insertCotizacionItems(cotizacionId, items) {
-  const normalizedItems = (items || []).map((item, index) => {
-    const calculated = calculateCotizacion({ items: [item] }).items[0];
+  const calculatedItems = calculateCotizacion({ items }).items;
+  if (!calculatedItems.length) return;
 
-    return {
-      cotizacionId,
-      servicioId: item.servicioId ? Number(item.servicioId) : null,
-      equipoId: item.equipoId ? Number(item.equipoId) : null,
-      descripcion: item.descripcion || '',
-      cantidad: calculated.cantidad,
-      precioUnitario: calculated.precioUnitario,
-      descuentoPct: calculated.descuentoPct,
-      orden: Number(item.orden || index + 1),
-    };
+  const [equipos, servicios] = await Promise.all([
+    fetchTable('Equipo'),
+    fetchTable('Servicio'),
+  ]);
+  const equiposById = mapById(equipos);
+  const serviciosById = mapById(servicios);
+
+  for (const item of calculatedItems) {
+    const equipo = equiposById.get(item.equipoId);
+    if (!equipo) throw new Error('El ítem seleccionado ya no está disponible. Actualiza la cotización e inténtalo nuevamente.');
+
+    const nombre = String(equipo.nombre || '').trim();
+    const codigo = [equipo.partNumber, equipo.ean, equipo.serial, equipo.codigoInterno]
+      .map((value) => String(value || '').trim())
+      .find(Boolean) || null;
+    const descripcion = [equipo.fabricante, equipo.modelo]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .join(' · ') || nombre;
+    const primaryServiceId = item.servicios[0]?.servicioId || null;
+
+    const itemResult = await supabase()
+      .from('CotizacionItem')
+      .insert({
+        cotizacionId,
+        servicioId: primaryServiceId,
+        equipoId: item.equipoId,
+        nombre,
+        codigo,
+        descripcion,
+        cantidad: 1,
+        precioUnitario: 0,
+        descuentoTipo: 'porcentaje',
+        descuentoValor: 0,
+        descuentoPct: 0,
+        orden: item.orden,
+      })
+      .select('id')
+      .single();
+    assertSupabaseResult(itemResult);
+
+    const serviceRows = item.servicios.map((service) => {
+      const catalogService = serviciosById.get(service.servicioId);
+      if (!catalogService) throw new Error('Uno de los servicios seleccionados ya no está disponible. Actualiza la cotización e inténtalo nuevamente.');
+
+      return {
+        cotizacionItemId: itemResult.data.id,
+        servicioId: service.servicioId,
+        nombre: String(catalogService.descripcion || catalogService.nombre || 'Servicio').trim(),
+        descripcionDetalle: service.descripcionDetalle,
+        cantidad: service.cantidad,
+        precioUnitario: service.precioUnitario,
+        descuentoTipo: service.descuentoTipo,
+        descuentoValor: service.descuentoValor,
+        descuentoPct: service.descuentoPct,
+        orden: service.orden,
+      };
+    });
+    const serviceResult = await supabase().from('CotizacionItemServicio').insert(serviceRows);
+    assertSupabaseResult(serviceResult);
+  }
+}
+
+function assertValidCotizacion(payload) {
+  if (!Number.isInteger(Number(payload?.clienteId))) {
+    throw new Error('Debes seleccionar un cliente para la cotización.');
+  }
+
+  if (!Array.isArray(payload?.items) || payload.items.length === 0) {
+    throw new Error('Agrega al menos un ítem a la cotización.');
+  }
+
+  payload.items.forEach((item, index) => {
+    if (!Number.isInteger(Number(item?.equipoId))) throw new Error(`Debes seleccionar el ítem ${index + 1}.`);
+    if (!Array.isArray(item?.servicios) || item.servicios.length === 0) throw new Error(`El ítem ${index + 1} debe incluir al menos un servicio.`);
+    item.servicios.forEach((service, serviceIndex) => {
+      if (!Number.isInteger(Number(service?.servicioId))) throw new Error(`Debes seleccionar el servicio ${serviceIndex + 1} del ítem ${index + 1}.`);
+      if (!Number.isFinite(Number(service?.cantidad)) || Number(service.cantidad) <= 0) throw new Error(`La cantidad del servicio ${serviceIndex + 1} del ítem ${index + 1} debe ser mayor que cero.`);
+      if (!Number.isFinite(Number(service?.precioUnitario)) || Number(service.precioUnitario) < 0) throw new Error(`El precio unitario del servicio ${serviceIndex + 1} del ítem ${index + 1} no es válido.`);
+    });
   });
-
-  if (!normalizedItems.length) return;
-
-  const result = await supabase()
-    .from('CotizacionItem')
-    .insert(normalizedItems);
-  assertSupabaseResult(result);
 }
 
 async function createCotizacion(payload) {
+  assertValidCotizacion(payload);
   const calculated = calculateCotizacion(payload);
   const cotizacionPayload = pickWritable('cotizaciones', {
     ...calculated,
@@ -625,6 +826,7 @@ async function createCotizacion(payload) {
 }
 
 async function updateCotizacion(id, payload) {
+  if ('items' in payload) assertValidCotizacion(payload);
   const calculated = calculateCotizacion(payload);
   const cotizacionPayload = pickWritable('cotizaciones', calculated);
   const cotizacion = Object.keys(cotizacionPayload).length
@@ -645,9 +847,87 @@ async function updateCotizacion(id, payload) {
   return getCotizacion(id);
 }
 
+async function syncCamionConductorLinks(ownerField, ownerId, targetField, targetIds) {
+  const normalizedIds = [...new Set((targetIds || []).map((id) => Number(id)).filter(Number.isInteger))];
+  const desiredIds = new Set(normalizedIds);
+
+  const existingResult = await supabase()
+    .from('CamionConductor')
+    .select('*')
+    .eq(ownerField, Number(ownerId));
+  if (isMissingTableError(existingResult.error)) {
+    throw new Error('Falta aplicar la migración de transporte para CamionConductor.');
+  }
+  const existingRows = normalizeRows(assertSupabaseResult(existingResult));
+  const existingByTarget = new Map(existingRows.map((row) => [Number(row[targetField]), row]));
+
+  await Promise.all(existingRows.map((row) => {
+    const shouldBeActive = desiredIds.has(Number(row[targetField]));
+    if (Boolean(row.activo) === shouldBeActive) return null;
+    return supabase()
+      .from('CamionConductor')
+      .update({ activo: shouldBeActive })
+      .eq('id', row.id)
+      .then(assertSupabaseResult);
+  }).filter(Boolean));
+
+  const missingIds = normalizedIds.filter((targetId) => !existingByTarget.has(targetId));
+  if (!missingIds.length) return;
+
+  const insertResult = await supabase()
+    .from('CamionConductor')
+    .insert(missingIds.map((targetId) => ({
+      [ownerField]: Number(ownerId),
+      [targetField]: targetId,
+      activo: true,
+    })));
+  assertSupabaseResult(insertResult);
+}
+
+async function upsertCamionConductores(camionId, conductorIds) {
+  return syncCamionConductorLinks('camionId', camionId, 'conductorId', conductorIds);
+}
+
+async function upsertConductorCamiones(conductorId, camionIds) {
+  return syncCamionConductorLinks('conductorId', conductorId, 'camionId', camionIds);
+}
+
+async function createCamion(payload) {
+  const row = await insertRow('camiones', pickWritable('camiones', {
+    ...payload,
+    patente: String(payload.patente || '').trim().toUpperCase(),
+  }));
+  await upsertCamionConductores(row.id, payload.conductorIds);
+  return getCamion(row.id);
+}
+
+async function updateCamion(id, payload) {
+  const nextPayload = { ...payload };
+  if ('patente' in nextPayload) nextPayload.patente = String(nextPayload.patente || '').trim().toUpperCase();
+  const row = await updateRow('camiones', id, pickWritable('camiones', nextPayload));
+  if (!row) return null;
+  if ('conductorIds' in payload) await upsertCamionConductores(row.id, payload.conductorIds);
+  return getCamion(row.id);
+}
+
+async function createConductor(payload) {
+  const row = await insertRow('conductores', pickWritable('conductores', payload));
+  await upsertConductorCamiones(row.id, payload.camionIds);
+  return getConductor(row.id);
+}
+
+async function updateConductor(id, payload) {
+  const row = await updateRow('conductores', id, pickWritable('conductores', payload));
+  if (!row) return null;
+  if ('camionIds' in payload) await upsertConductorCamiones(row.id, payload.camionIds);
+  return getConductor(row.id);
+}
+
 export async function createEntity(entity, payload) {
   if (entity === 'visitas') return createVisita(payload);
   if (entity === 'cotizaciones') return createCotizacion(payload);
+  if (entity === 'camiones') return createCamion(payload);
+  if (entity === 'conductores') return createConductor(payload);
 
   const row = await insertRow(entity, pickWritable(entity, payload));
   const config = ENTITY_CONFIG[entity];
@@ -658,6 +938,8 @@ export async function createEntity(entity, payload) {
 export async function updateEntity(entity, id, payload) {
   if (entity === 'visitas') return updateVisita(id, payload);
   if (entity === 'cotizaciones') return updateCotizacion(id, payload);
+  if (entity === 'camiones') return updateCamion(id, payload);
+  if (entity === 'conductores') return updateConductor(id, payload);
 
   const row = await updateRow(entity, id, pickWritable(entity, payload));
   if (!row) return null;
@@ -683,25 +965,174 @@ export async function deleteEntity(entity, id) {
 }
 
 export async function listClientes() {
-  const [clientes, equipos, visitas] = await Promise.all([
+  const [clientes, equipos, visitas, contactos, direcciones, cotizaciones, ordenesTrabajo, adjuntos] = await Promise.all([
     selectAll('Cliente', 'nombre'),
     fetchTable('Equipo'),
     fetchTable('Visita'),
+    fetchTable('ClienteContacto', { optional: true }),
+    fetchTable('ClienteDireccion', { optional: true }),
+    fetchTable('Cotizacion', { optional: true }),
+    fetchTable('OrdenTrabajo', { optional: true }),
+    fetchTable('ArchivoAdjunto', { optional: true }),
   ]);
 
-  return clientes.map((cliente) => ({
+  return clientes.filter((cliente) => !cliente.esEmpresaCMCing).map((cliente) => ({
     ...cliente,
+    contactos: contactos.filter((contacto) => contacto.clienteId === cliente.id),
+    direcciones: direcciones.filter((direccion) => direccion.clienteId === cliente.id),
     equipos: equipos
       .filter((equipo) => equipo.clienteId === cliente.id)
-      .map((equipo) => ({ id: equipo.id, nombre: equipo.nombre, modelo: equipo.modelo, serial: equipo.serial, imagenUrl: equipo.imagenUrl })),
+      .map((equipo) => ({ id: equipo.id, nombre: equipo.nombre, modelo: equipo.modelo, serial: equipo.serial, partNumber: equipo.partNumber, ean: equipo.ean, imagenUrl: equipo.imagenUrl, imagenR2Key: equipo.imagenR2Key })),
     visitas: visitas
       .filter((visita) => visita.clienteId === cliente.id)
       .map((visita) => ({ id: visita.id, fecha: visita.fecha, descripcion: visita.descripcion, estado: visita.estado })),
+    historial: [
+      ...visitas
+        .filter((visita) => visita.clienteId === cliente.id)
+        .map((visita) => ({
+          id: `visita-${visita.id}`,
+          tipo: 'Visita',
+          titulo: visita.codigo || visita.descripcion || `Visita ${visita.id}`,
+          fecha: visita.fecha,
+          estado: visita.estado,
+          refId: visita.id,
+        })),
+      ...ordenesTrabajo
+        .filter((orden) => orden.clienteId === cliente.id)
+        .map((orden) => ({
+          id: `ot-${orden.id}`,
+          tipo: 'Orden de trabajo',
+          titulo: orden.titulo || `OT ${orden.id}`,
+          fecha: orden.fechaProgramada || orden.createdAt,
+          estado: orden.estado,
+          refId: orden.id,
+        })),
+      ...cotizaciones
+        .filter((cotizacion) => cotizacion.clienteId === cliente.id)
+        .map((cotizacion) => ({
+          id: `cotizacion-${cotizacion.id}`,
+          tipo: 'Cotización',
+          titulo: cotizacion.numero || `Cotización ${cotizacion.id}`,
+          fecha: cotizacion.fecha,
+          estado: cotizacion.estado,
+          refId: cotizacion.id,
+        })),
+    ].sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime()),
+    documentos: [
+      ...cotizaciones
+        .filter((cotizacion) => cotizacion.clienteId === cliente.id)
+        .map((cotizacion) => ({
+          id: `cotizacion-${cotizacion.id}`,
+          tipo: 'Cotización',
+          nombre: cotizacion.numero || `Cotización ${cotizacion.id}`,
+          fecha: cotizacion.fecha,
+          estado: cotizacion.estado,
+        })),
+      ...adjuntos
+        .filter((adjunto) => visitas.some((visita) => visita.clienteId === cliente.id && visita.id === adjunto.visitaId))
+        .map((adjunto) => ({
+          id: `adjunto-${adjunto.id}`,
+          tipo: adjunto.tipo || 'Adjunto',
+          nombre: adjunto.nombreOriginal || adjunto.r2Key || `Adjunto ${adjunto.id}`,
+          fecha: adjunto.createdAt,
+          url: getPrivateFileUrl(adjunto),
+        })),
+    ].sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime()),
   }));
 }
 
 export async function getCliente(id) {
   return (await listClientes()).find((cliente) => cliente.id === numericId(id)) || null;
+}
+
+function cleanText(value) {
+  const text = String(value || '').trim();
+  return text || null;
+}
+
+export async function createClienteContacto(clienteId, payload) {
+  const row = {
+    clienteId: numericId(clienteId),
+    nombre: cleanText(payload.nombre),
+    cargo: cleanText(payload.cargo),
+    email: cleanText(payload.email),
+    telefono: cleanText(payload.telefono),
+    rol: cleanText(payload.rol) || 'principal',
+    principal: Boolean(payload.principal),
+    notas: cleanText(payload.notas),
+  };
+  if (!row.clienteId || !row.nombre) throw new Error('Contacto incompleto.');
+  const result = await supabase().from('ClienteContacto').insert(row).select('*').single();
+  return normalizeRow(assertSupabaseResult(result));
+}
+
+export async function updateClienteContacto(clienteId, contactoId, payload) {
+  const row = {};
+  ['nombre', 'cargo', 'email', 'telefono', 'rol', 'notas'].forEach((field) => {
+    if (field in payload) row[field] = cleanText(payload[field]);
+  });
+  if ('principal' in payload) row.principal = Boolean(payload.principal);
+  const result = await supabase()
+    .from('ClienteContacto')
+    .update(row)
+    .eq('clienteId', numericId(clienteId))
+    .eq('id', numericId(contactoId))
+    .select('*')
+    .maybeSingle();
+  return normalizeRow(assertSupabaseResult(result));
+}
+
+export async function deleteClienteContacto(clienteId, contactoId) {
+  const result = await supabase()
+    .from('ClienteContacto')
+    .delete()
+    .eq('clienteId', numericId(clienteId))
+    .eq('id', numericId(contactoId));
+  assertSupabaseResult(result);
+  return true;
+}
+
+export async function createClienteDireccion(clienteId, payload) {
+  const row = {
+    clienteId: numericId(clienteId),
+    tipo: cleanText(payload.tipo) || 'servicio',
+    nombre: cleanText(payload.nombre),
+    direccion: cleanText(payload.direccion),
+    comuna: cleanText(payload.comuna),
+    ciudad: cleanText(payload.ciudad),
+    region: cleanText(payload.region),
+    principal: Boolean(payload.principal),
+    notas: cleanText(payload.notas),
+  };
+  if (!row.clienteId || !row.direccion) throw new Error('Dirección incompleta.');
+  const result = await supabase().from('ClienteDireccion').insert(row).select('*').single();
+  return normalizeRow(assertSupabaseResult(result));
+}
+
+export async function updateClienteDireccion(clienteId, direccionId, payload) {
+  const row = {};
+  ['tipo', 'nombre', 'direccion', 'comuna', 'ciudad', 'region', 'notas'].forEach((field) => {
+    if (field in payload) row[field] = cleanText(payload[field]);
+  });
+  if ('principal' in payload) row.principal = Boolean(payload.principal);
+  const result = await supabase()
+    .from('ClienteDireccion')
+    .update(row)
+    .eq('clienteId', numericId(clienteId))
+    .eq('id', numericId(direccionId))
+    .select('*')
+    .maybeSingle();
+  return normalizeRow(assertSupabaseResult(result));
+}
+
+export async function deleteClienteDireccion(clienteId, direccionId) {
+  const result = await supabase()
+    .from('ClienteDireccion')
+    .delete()
+    .eq('clienteId', numericId(clienteId))
+    .eq('id', numericId(direccionId));
+  assertSupabaseResult(result);
+  return true;
 }
 
 export async function listEquipos() {
@@ -858,6 +1289,150 @@ export async function getActividad(id) {
   return (await listActividades()).find((actividad) => actividad.id === numericId(id)) || null;
 }
 
+export async function listCamiones() {
+  const [camiones, conductores, relaciones, clientes, fotos] = await Promise.all([
+    fetchTable('Camion', { optional: true }),
+    fetchTable('Conductor', { optional: true }),
+    fetchTable('CamionConductor', { optional: true }),
+    fetchTable('Cliente'),
+    fetchTable('CamionFoto', { optional: true }),
+  ]);
+  const conductoresById = mapById(conductores);
+  const clientesById = mapById(clientes);
+
+  return camiones
+    .map((camion) => ({
+      ...camion,
+      propietarioCliente: camion.propietarioClienteId ? shortCliente(clientesById.get(camion.propietarioClienteId)) : null,
+      conductores: relaciones
+        .filter((relacion) => relacion.camionId === camion.id && relacion.activo !== false)
+        .map((relacion) => shortConductor(conductoresById.get(relacion.conductorId)))
+        .filter(Boolean),
+      conductorIds: relaciones
+        .filter((relacion) => relacion.camionId === camion.id && relacion.activo !== false)
+        .map((relacion) => relacion.conductorId),
+      fotos: fotos
+        .filter((foto) => foto.camionId === camion.id)
+        .map((foto) => ({ ...foto, url: getPrivateFileUrl(foto) }))
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()),
+      historial: [
+        ...relaciones
+          .filter((relacion) => relacion.camionId === camion.id)
+          .map((relacion) => ({
+            id: `conductor-${relacion.conductorId}`,
+            tipo: 'Asignación conductor',
+            titulo: conductoresById.get(relacion.conductorId)?.nombre || `Conductor ${relacion.conductorId}`,
+            fecha: relacion.updatedAt || relacion.createdAt,
+            estado: relacion.activo === false ? 'inactivo' : 'activo',
+          })),
+        ...fotos
+          .filter((foto) => foto.camionId === camion.id)
+          .map((foto) => ({
+            id: `foto-${foto.id}`,
+            tipo: 'Foto',
+            titulo: foto.nombreOriginal || foto.titulo || `Foto ${foto.id}`,
+            fecha: foto.createdAt,
+            estado: foto.tipo || 'foto',
+          })),
+      ].sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime()),
+    }))
+    .sort((a, b) => String(a.patente || '').localeCompare(String(b.patente || ''), 'es'));
+}
+
+export async function getCamion(id) {
+  return (await listCamiones()).find((camion) => camion.id === numericId(id)) || null;
+}
+
+export async function listConductores() {
+  const [conductores, camiones, relaciones] = await Promise.all([
+    fetchTable('Conductor', { optional: true }),
+    fetchTable('Camion', { optional: true }),
+    fetchTable('CamionConductor', { optional: true }),
+  ]);
+  const camionesById = mapById(camiones);
+
+  return conductores
+    .map((conductor) => ({
+      ...conductor,
+      camiones: relaciones
+        .filter((relacion) => relacion.conductorId === conductor.id && relacion.activo !== false)
+        .map((relacion) => shortCamion(camionesById.get(relacion.camionId)))
+        .filter(Boolean),
+      camionIds: relaciones
+        .filter((relacion) => relacion.conductorId === conductor.id && relacion.activo !== false)
+        .map((relacion) => relacion.camionId),
+      historial: relaciones
+        .filter((relacion) => relacion.conductorId === conductor.id)
+        .map((relacion) => ({
+          id: `camion-${relacion.camionId}`,
+          tipo: 'Asignación camión',
+          titulo: camionesById.get(relacion.camionId)?.patente || `Camión ${relacion.camionId}`,
+          fecha: relacion.updatedAt || relacion.createdAt,
+          estado: relacion.activo === false ? 'inactivo' : 'activo',
+        })),
+    }))
+    .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+}
+
+export async function getConductor(id) {
+  return (await listConductores()).find((conductor) => conductor.id === numericId(id)) || null;
+}
+
+export async function createCamionFoto(camionId, metadata) {
+  const row = {
+    camionId: numericId(camionId),
+    tipo: cleanText(metadata.tipo) || 'foto',
+    titulo: cleanText(metadata.titulo),
+    nombreOriginal: cleanText(metadata.nombreOriginal),
+    mimeType: cleanText(metadata.mimeType),
+    sizeBytes: normalizeNumber(metadata.sizeBytes),
+    r2Bucket: metadata.r2Bucket,
+    r2Key: metadata.r2Key,
+    checksumSha256: metadata.checksumSha256,
+    observaciones: cleanText(metadata.observaciones),
+  };
+  if (!row.camionId || !row.r2Bucket || !row.r2Key) throw new Error('Foto de camión incompleta.');
+
+  const result = await supabase().from('CamionFoto').insert(row).select('*').single();
+  if (!result.error) return normalizeRow(result.data);
+
+  if (result.error.code !== '23505') {
+    const storageError = new Error(result.error.message);
+    storageError.code = result.error.code;
+    throw storageError;
+  }
+
+  // CamionFoto_r2Key_key es el árbitro de idempotencia. Si otra solicitud
+  // ganó la carrera, se devuelve esa misma fila en vez de tratar de compensar
+  // borrando el objeto compartido en R2.
+  const existingResult = await supabase()
+    .from('CamionFoto')
+    .select('*')
+    .eq('r2Key', row.r2Key)
+    .maybeSingle();
+
+  if (existingResult.error) {
+    const lookupError = new Error(existingResult.error.message);
+    lookupError.code = existingResult.error.code;
+    throw lookupError;
+  }
+
+  const existing = normalizeRow(existingResult.data);
+  const sameEvidence = existing
+    && Number(existing.camionId) === row.camionId
+    && existing.r2Bucket === row.r2Bucket
+    && existing.checksumSha256 === row.checksumSha256;
+
+  if (!sameEvidence) {
+    const conflictError = new Error('La evidencia R2 ya está registrada con otro contenido o camión.');
+    conflictError.status = 409;
+    conflictError.code = 'CAMION_FOTO_R2_KEY_CONFLICT';
+    throw conflictError;
+  }
+
+  return existing;
+}
+
 export async function listVendedores() {
   const [vendedores, visitas] = await Promise.all([
     selectAll('Vendedor', 'nombre'),
@@ -908,12 +1483,13 @@ export async function getVisita(id) {
 }
 
 async function getCotizacionContext() {
-  const [clientes, vendedores, equipos, servicios, items] = await Promise.all([
+  const [clientes, vendedores, equipos, servicios, items, itemServicios] = await Promise.all([
     fetchTable('Cliente'),
     fetchTable('Vendedor'),
     fetchTable('Equipo'),
     fetchTable('Servicio'),
     fetchTable('CotizacionItem'),
+    fetchTable('CotizacionItemServicio', { optional: true }),
   ]);
 
   return {
@@ -922,6 +1498,7 @@ async function getCotizacionContext() {
     equipos: mapById(equipos),
     servicios: mapById(servicios),
     items,
+    itemServicios,
   };
 }
 
@@ -933,6 +1510,13 @@ function formatCotizacion(cotizacion, context) {
       ...item,
       equipo: item.equipoId ? shortEquipo(context.equipos.get(item.equipoId)) : null,
       servicio: item.servicioId ? shortServicio(context.servicios.get(item.servicioId)) : null,
+      servicios: context.itemServicios
+        .filter((service) => service.cotizacionItemId === item.id)
+        .sort((a, b) => a.orden - b.orden)
+        .map((service) => ({
+          ...service,
+          servicio: service.servicioId ? shortServicio(context.servicios.get(service.servicioId)) : null,
+        })),
     }));
 
   return {
@@ -965,12 +1549,14 @@ export async function listSyncJobs() {
 }
 
 export async function getDashboardStats() {
-  const [clientes, cotizaciones, equipos, tecnicos, visitas] = await Promise.all([
+  const [clientes, cotizaciones, equipos, tecnicos, visitas, camiones, conductores] = await Promise.all([
     supabase().from('Cliente').select('id', { count: 'exact', head: true }),
     supabase().from('Cotizacion').select('id', { count: 'exact', head: true }),
     supabase().from('Equipo').select('id', { count: 'exact', head: true }),
     supabase().from('Tecnico').select('id', { count: 'exact', head: true }),
     supabase().from('Visita').select('id', { count: 'exact', head: true }),
+    supabase().from('Camion').select('id', { count: 'exact', head: true }),
+    supabase().from('Conductor').select('id', { count: 'exact', head: true }),
   ]);
 
   [clientes, cotizaciones, equipos, tecnicos, visitas].forEach(assertSupabaseResult);
@@ -981,6 +1567,8 @@ export async function getDashboardStats() {
     equipos: equipos.count || 0,
     tecnicos: tecnicos.count || 0,
     visitas: visitas.count || 0,
+    camiones: camiones.error ? 0 : camiones.count || 0,
+    conductores: conductores.error ? 0 : conductores.count || 0,
   };
 }
 
@@ -1028,6 +1616,7 @@ export async function getInformeVisitas(filters = {}) {
           modelo: equipo.modelo,
           serial: equipo.serial,
           imagenUrl: equipo.imagenUrl,
+          imagenR2Key: equipo.imagenR2Key,
         });
       }
       return acc;
@@ -1080,6 +1669,7 @@ export async function getInformeFacturacion(filters = {}) {
           modelo: equipo.modelo,
           serial: equipo.serial,
           imagenUrl: equipo.imagenUrl,
+          imagenR2Key: equipo.imagenR2Key,
         });
       }
       return acc;

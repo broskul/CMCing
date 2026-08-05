@@ -1,1042 +1,799 @@
 'use client';
 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { deleteSyncJob, enqueueSyncJob, listSyncJobs, updateSyncJob } from '../lib/offline-queue';
+import Link from 'next/link';
+import { MultiComboBox } from '../components/ComboBox';
+import {
+  configureOfflinePartition,
+  createOfflineUuid,
+  enqueueOfflineMutation,
+  getActiveOfflineUser,
+  getOfflineBlob,
+  getWorkPackage,
+  listOfflineMutations,
+  listOfflineSnapshots,
+  putOfflineBlob,
+  removeOfflineBlob,
+  runOfflineSyncCoordinator,
+  saveWorkPackage,
+  upsertOfflineSnapshot,
+} from '../lib/offline-queue';
 
-const checklistTemplate = [
-  'Chequeo primario de funcionamiento',
-  'Chequeo estructural, accesorios y componentes',
-  'Chequeo de controles y comandos',
-  'Chequeo de conexiones eléctricas',
-  'Hermeticidad de extracción',
-  'Verificación de filtro absoluto',
-  'Verificación de uniformidad',
-  'Verificación de recuento de partículas',
-  'Verificación de nivel de ruido',
-  'Verificación de iluminación',
-  'Verificación de temperatura',
-  'Verificación de humedad relativa',
-  'Prueba de humo',
-];
+const WORK_PACKAGE_ID = 'technician-bootstrap-v1';
+const DRAFT_ENTITY = 'technician-activity-draft';
+const TENANT_ID = 'cmcing';
 
-const defaultObjective = 'Verificar el correcto funcionamiento del equipo de acuerdo a especificaciones de fábrica.';
-const defaultSpecifications = 'Para cada medición se debe cumplir que los parámetros de operación programados y obtenidos son los mismos para el proceso.';
+function formatDate(value, options = {}) {
+  if (!value) return 'Sin fecha programada';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha programada';
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    hour: options.dateOnly ? undefined : '2-digit',
+    minute: options.dateOnly ? undefined : '2-digit',
+  }).format(date);
+}
 
-const variableOptions = [
-  'Temperatura',
-  'Velocidad de flujo',
-  'Recuento de partículas',
-  'Ruido',
-  'Iluminación',
-  'Humedad relativa',
-  'Torque',
-];
-
-const unitOptions = ['°C', 'm/s', 'dB', 'Lux', '%HR', '%', 'Nm', 'partículas/pie³', 'N/A'];
-
-const createDefaultChecklist = () => checklistTemplate.slice(0, 4).map((label) => ({ label, checked: false }));
-
-const createEmptyMeasurement = () => ({
-  variable: '',
-  unidad: '°C',
-  programado: '',
-  observado: '',
-  referencia: '',
-  diferenciaModo: 'unidad',
-  diferencia: '',
-  criterioModo: 'tolerancia',
-  criterioUnidad: 'medicion',
-  criterioMenos: '',
-  criterioMas: '',
-  criterioMin: '',
-  criterioMax: '',
-  cumple: 'Si',
-  criterio: '',
-});
-
-const createEmptyForm = () => ({
-  clienteId: '',
-  equipoIds: [],
-  tecnicoId: '',
-  servicioId: '',
-  fecha: '',
-  objetivo: defaultObjective,
-  especificaciones: defaultSpecifications,
-  trabajoRealizado: '',
-  checklist: createDefaultChecklist(),
-  mediciones: [],
-  certificadoInstrumentos: '',
-  codigoInstrumento: '',
-  codigoServicio: '',
-  firmaTexto: '',
-  attachments: [],
-  imageAttachments: [],
-  selfieDataUrl: '',
-});
-
-const hasMeasurementData = (measurement) => ['variable', 'programado', 'observado', 'diferencia', 'criterio']
-  .some((field) => String(measurement[field] || '').trim());
-
-const normalizeNumberText = (value) => String(value ?? '').replace(',', '.').trim();
-
-const parseMeasurementNumber = (value) => {
-  const normalized = normalizeNumberText(value);
-  if (!normalized) return null;
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : null;
-};
-
-const formatMeasurementNumber = (value, decimals = 2) => {
-  if (!Number.isFinite(value)) return '';
-  const fixed = value.toFixed(decimals);
-  return fixed.replace(/\.?0+$/, '');
-};
-
-const getCriterionUnit = (measurement) => (measurement.criterioUnidad === 'porcentaje' ? '%' : measurement.unidad || '');
-
-const getDifferenceValue = (measurement, mode = measurement.diferenciaModo) => {
-  const observed = parseMeasurementNumber(measurement.observado);
-  if (observed === null) return null;
-
-  if (mode === 'porcentaje') {
-    const reference = parseMeasurementNumber(measurement.referencia)
-      ?? parseMeasurementNumber(measurement.programado);
-    if (reference === null || reference === 0) return null;
-    return ((observed - reference) / reference) * 100;
+function normalizeOption(option, index) {
+  if (option && typeof option === 'object') {
+    const value = option.value ?? option.id ?? option.codigo ?? option.label ?? option.nombre ?? option;
+    return {
+      id: `option-${index}-${JSON.stringify(value)}`,
+      label: String(option.label || option.nombre || option.descripcion || value),
+      value,
+    };
   }
+  return { id: `option-${index}-${String(option)}`, label: String(option), value: option };
+}
 
-  const expected = parseMeasurementNumber(measurement.programado);
-  if (expected === null) return null;
-  return observed - expected;
-};
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
 
-const buildCriterionText = (measurement) => {
-  const unit = getCriterionUnit(measurement);
-  const minus = normalizeNumberText(measurement.criterioMenos || measurement.criterioMas);
-  const plus = normalizeNumberText(measurement.criterioMas || measurement.criterioMenos);
-  const min = normalizeNumberText(measurement.criterioMin);
-  const max = normalizeNumberText(measurement.criterioMax);
+function answerValue(item, response) {
+  if (!response) return item.tipoRespuesta === 'seleccion_multiple' ? [] : '';
+  if (item.tipoRespuesta === 'numero') return response.valorNumero ?? '';
+  if (item.tipoRespuesta === 'dicotomica') return typeof response.valorBooleano === 'boolean' ? response.valorBooleano : '';
+  if (item.tipoRespuesta === 'seleccion_multiple') return Array.isArray(response.valorOpciones) ? response.valorOpciones : [];
+  return response.valorTexto || '';
+}
 
-  if (measurement.criterioModo === 'tolerancia') {
-    if (!minus && !plus) return '';
-    if (minus && plus && minus !== plus) {
-      return `Los valores individuales de operación deben encontrarse entre -${minus} ${unit} y +${plus} ${unit}.`;
+function buildDraft(activity) {
+  const answers = {};
+  for (const assignment of activity.matrices || []) {
+    answers[assignment.id] = {};
+    for (const item of assignment.items || []) {
+      const response = assignment.respuestas?.find((row) => Number(row.matrizItemId) === Number(item.itemId));
+      answers[assignment.id][item.itemId] = answerValue(item, response);
     }
-    return `Los valores individuales de operación deben encontrarse en ± ${plus || minus} ${unit}.`;
   }
-
-  if (measurement.criterioModo === 'rango') {
-    if (!min || !max) return '';
-    return `Los valores de operación deben encontrarse entre ${min} ${unit} y ${max} ${unit}.`;
-  }
-
-  if (measurement.criterioModo === 'maximo') {
-    if (!max) return '';
-    return `Valor máximo permitido: ${max} ${unit}.`;
-  }
-
-  if (measurement.criterioModo === 'minimo') {
-    if (!min) return '';
-    return `Valor mínimo permitido: ${min} ${unit}.`;
-  }
-
-  return '';
-};
-
-const evaluateMeasurement = (measurement) => {
-  const observed = parseMeasurementNumber(measurement.observado);
-  const rawDifference = getDifferenceValue(measurement, 'unidad');
-  const percentDifference = getDifferenceValue(measurement, 'porcentaje');
-  const criterionValue = measurement.criterioUnidad === 'porcentaje' ? percentDifference : rawDifference;
-  const criterionMode = measurement.criterioModo;
-
-  let cumple = 'N/A';
-  if (criterionMode === 'tolerancia') {
-    const minus = parseMeasurementNumber(measurement.criterioMenos || measurement.criterioMas);
-    const plus = parseMeasurementNumber(measurement.criterioMas || measurement.criterioMenos);
-    if (criterionValue !== null && minus !== null && plus !== null) {
-      cumple = criterionValue >= -Math.abs(minus) && criterionValue <= Math.abs(plus) ? 'Si' : 'No';
-    }
-  } else if (criterionMode === 'rango') {
-    const min = parseMeasurementNumber(measurement.criterioMin);
-    const max = parseMeasurementNumber(measurement.criterioMax);
-    const value = measurement.criterioUnidad === 'porcentaje' ? percentDifference : observed;
-    if (value !== null && min !== null && max !== null) {
-      cumple = value >= min && value <= max ? 'Si' : 'No';
-    }
-  } else if (criterionMode === 'maximo') {
-    const max = parseMeasurementNumber(measurement.criterioMax);
-    const value = measurement.criterioUnidad === 'porcentaje' ? percentDifference : observed;
-    if (value !== null && max !== null) cumple = value <= max ? 'Si' : 'No';
-  } else if (criterionMode === 'minimo') {
-    const min = parseMeasurementNumber(measurement.criterioMin);
-    const value = measurement.criterioUnidad === 'porcentaje' ? percentDifference : observed;
-    if (value !== null && min !== null) cumple = value >= min ? 'Si' : 'No';
-  }
-
-  const differenceValue = getDifferenceValue(measurement, measurement.diferenciaModo);
-  const differenceUnit = measurement.diferenciaModo === 'porcentaje' ? '%' : measurement.unidad;
-  const differenceText = differenceValue === null
-    ? ''
-    : `${differenceValue > 0 ? '+' : ''}${formatMeasurementNumber(differenceValue)}${differenceUnit ? ` ${differenceUnit}` : ''}`;
-
   return {
-    ...measurement,
-    diferencia: differenceText,
-    cumple,
-    criterio: buildCriterionText(measurement),
+    activityId: activity.id,
+    notes: activity.notasTecnico || '',
+    answers,
+    baseRevision: Number(activity.rowRevision || 1),
+    dirty: { notes: false, matrices: {} },
+    updatedAt: Date.now(),
   };
-};
+}
 
-const buildMeasurementLabel = (measurement) => `${measurement.variable}${measurement.unidad && measurement.unidad !== 'N/A' ? ` ${measurement.unidad}` : ''}`;
+function hasDirtyDraft(draft) {
+  return Boolean(draft?.dirty?.notes)
+    || Object.values(draft?.dirty?.matrices || {}).some(Boolean);
+}
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
+function isAnswered(item, value) {
+  if (item.tipoRespuesta === 'numero') return value !== '' && value !== null && Number.isFinite(Number(value));
+  if (item.tipoRespuesta === 'dicotomica') return typeof value === 'boolean';
+  if (item.tipoRespuesta === 'seleccion_multiple') return Array.isArray(value) && value.length > 0;
+  return Boolean(String(value || '').trim());
+}
+
+function missingItems(assignment, draft) {
+  return (assignment.items || []).filter((item) => item.requerido
+    && !isAnswered(item, draft?.answers?.[assignment.id]?.[item.itemId]));
+}
+
+function buildAnswerPayload(assignment, draft) {
+  return (assignment.items || []).flatMap((item) => {
+    const value = draft?.answers?.[assignment.id]?.[item.itemId];
+    if (!isAnswered(item, value)) return [];
+    const base = { matrizItemId: Number(item.itemId) };
+    if (item.tipoRespuesta === 'numero') return [{ ...base, valorNumero: Number(value) }];
+    if (item.tipoRespuesta === 'dicotomica') return [{ ...base, valorBooleano: value }];
+    if (item.tipoRespuesta === 'seleccion_multiple') return [{ ...base, valorOpciones: value }];
+    return [{ ...base, valorTexto: String(value).trim() }];
   });
 }
 
+function priorityLabel(value) {
+  return ({ critica: 'Crítica', alta: 'Alta', media: 'Media', baja: 'Baja' })[value] || 'Media';
+}
+
+async function fetchJson(url, options) {
+  const response = await fetch(url, { cache: 'no-store', ...options });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || `Error HTTP ${response.status}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+  return data;
+}
+
+function MatrixInput({ item, value, onChange, disabled }) {
+  if (item.tipoRespuesta === 'numero') {
+    return (
+      <div className="technician-number-field">
+        <input type="number" inputMode="decimal" value={value ?? ''} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="input-base" placeholder="0,00" />
+        {item.medicion?.simbolo || item.medicion?.unidad ? <span>{item.medicion.simbolo || item.medicion.unidad}</span> : null}
+      </div>
+    );
+  }
+  if (item.tipoRespuesta === 'dicotomica') {
+    return (
+      <div className="technician-binary" role="group" aria-label={item.titulo}>
+        <button type="button" className={value === true ? 'is-selected is-pass' : ''} onClick={() => onChange(true)} disabled={disabled}>Cumple</button>
+        <button type="button" className={value === false ? 'is-selected is-fail' : ''} onClick={() => onChange(false)} disabled={disabled}>No cumple</button>
+      </div>
+    );
+  }
+  if (item.tipoRespuesta === 'seleccion_multiple') {
+    const options = (Array.isArray(item.opciones) ? item.opciones : []).map(normalizeOption);
+    const selectedIds = options.filter((option) => (value || []).some((chosen) => sameJson(chosen, option.value))).map((option) => option.id);
+    return (
+      <MultiComboBox
+        options={options}
+        values={selectedIds}
+        onChange={(ids) => onChange(ids.map((id) => options.find((option) => option.id === id)?.value).filter((option) => option !== undefined))}
+        getOptionLabel={(option) => option.label}
+        placeholder="Seleccionar opción..."
+        emptyText="Sin opciones seleccionadas."
+        disabled={disabled}
+      />
+    );
+  }
+  return <textarea value={value || ''} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="input-base min-h-24 resize-y" placeholder="Describa el resultado observado..." />;
+}
+
+function QueueBadge({ entries }) {
+  if (!entries.length) return <span className="technician-state is-synced">Al día</span>;
+  if (entries.some((entry) => entry.status === 'blocked')) return <span className="technician-state is-conflict">Conflicto</span>;
+  if (entries.some((entry) => entry.status === 'running')) return <span className="technician-state is-syncing">Sincronizando</span>;
+  if (entries.some((entry) => entry.status === 'failed')) return <span className="technician-state is-pending">Reintento pendiente</span>;
+  return <span className="technician-state is-pending">Pendiente</span>;
+}
+
 export default function TecnicoPage() {
-  const [form, setForm] = useState(() => createEmptyForm());
-  const [comboText, setComboText] = useState({
-    tecnico: '',
-    cliente: '',
-    servicio: '',
-    equipo: '',
-    checklist: '',
-  });
-  const [measurementDraft, setMeasurementDraft] = useState(() => createEmptyMeasurement());
-  const [options, setOptions] = useState({ clientes: [], equipos: [], tecnicos: [], servicios: [] });
-  const [online, setOnline] = useState(true);
+  const [activities, setActivities] = useState([]);
+  const [drafts, setDrafts] = useState({});
+  const [selectedId, setSelectedId] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [online, setOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [message, setMessage] = useState('');
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const canvasRef = useRef(null);
-  const drawingRef = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState(null);
+  const [openAI, setOpenAI] = useState({ checked: false, enabled: false });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [pendingPhotos, setPendingPhotos] = useState({});
+  const draftsRef = useRef({});
+  const revisionRef = useRef({});
   const syncingRef = useRef(false);
+  const initializedRef = useRef(false);
+  const previewUrlsRef = useRef(new Set());
+
+  const setDraftState = useCallback((activityId, updater) => {
+    const current = draftsRef.current;
+    const existing = current[activityId];
+    if (!existing) return;
+    const nextDraft = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
+    const next = { ...current, [activityId]: { ...nextDraft, updatedAt: Date.now() } };
+    draftsRef.current = next;
+    setDrafts(next);
+  }, []);
 
   const refreshQueue = useCallback(async () => {
-    const jobs = await listSyncJobs();
-    setQueue(jobs);
+    try {
+      const entries = await listOfflineMutations({ rehydrate: 'reference' });
+      setQueue(entries);
+      return entries;
+    } catch {
+      setQueue([]);
+      return [];
+    }
   }, []);
 
-  const loadOptions = useCallback(async () => {
-    const [clientesRes, equiposRes, tecnicosRes, serviciosRes, sessionRes] = await Promise.all([
-      fetch('/api/clientes'),
-      fetch('/api/equipos'),
-      fetch('/api/tecnicos'),
-      fetch('/api/servicios'),
-      fetch('/api/auth/session').catch(() => null),
+  const hydratePackage = useCallback(async (payload) => {
+    const [storedDrafts, pending] = await Promise.all([
+      listOfflineSnapshots(DRAFT_ENTITY, { rehydrate: 'reference' }).catch(() => []),
+      listOfflineMutations({ rehydrate: 'reference' }).catch(() => []),
     ]);
-
-    const [clientes, equipos, tecnicos, servicios] = await Promise.all([
-      clientesRes.json(),
-      equiposRes.json(),
-      tecnicosRes.json(),
-      serviciosRes.json(),
-    ]);
-    const session = sessionRes?.ok ? await sessionRes.json() : { user: null };
-
-    const tecnicoId = session.user?.tecnicoId || tecnicos[0]?.id || '';
-    const tecnico = tecnicos.find((item) => Number(item.id) === Number(tecnicoId));
-
-    setOptions({ clientes, equipos, tecnicos, servicios });
-    setComboText((prev) => ({
-      ...prev,
-      tecnico: prev.tecnico || tecnico?.nombre || '',
-    }));
-    setForm((prev) => ({
-      ...prev,
-      tecnicoId: prev.tecnicoId || tecnicoId,
-      firmaTexto: prev.firmaTexto || tecnico?.firmaTexto || tecnico?.nombre || '',
-      fecha: prev.fecha || new Date().toISOString().slice(0, 16),
-    }));
+    const storedByActivity = new Map(storedDrafts.map((snapshot) => [Number(snapshot.entityId), snapshot.payload]));
+    const pendingByActivity = new Map();
+    for (const entry of pending) {
+      const activityId = Number(entry.entityId || entry.payload?.activityId);
+      if (!Number.isInteger(activityId)) continue;
+      const list = pendingByActivity.get(activityId) || [];
+      list.push(entry);
+      pendingByActivity.set(activityId, list);
+    }
+    const nextDrafts = {};
+    for (const activity of payload.activities || []) {
+      const activityId = Number(activity.id);
+      const pendingEntries = pendingByActivity.get(activityId) || [];
+      revisionRef.current[activityId] = pendingEntries.length
+        ? Number(pendingEntries[0].baseRevision || pendingEntries[0].payload?.expectedRevision || 1)
+        : Number(activity.rowRevision || 1);
+      const serverDraft = buildDraft(activity);
+      const localDraft = draftsRef.current[activityId] || storedByActivity.get(activityId);
+      nextDrafts[activityId] = localDraft && (hasDirtyDraft(localDraft) || pendingEntries.length > 0)
+        ? localDraft
+        : serverDraft;
+    }
+    draftsRef.current = nextDrafts;
+    setDrafts(nextDrafts);
+    setActivities(payload.activities || []);
+    setSelectedId((current) => (payload.activities || []).some((activity) => Number(activity.id) === Number(current))
+      ? current
+      : null);
+    setQueue(pending);
   }, []);
 
-  const syncPending = useCallback(async () => {
-    if (!navigator.onLine || syncingRef.current) return;
+  const refreshFromServer = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setNotice(null);
+    const payload = await fetchJson('/api/tecnico/bootstrap');
+    const highestRevision = Math.max(1, ...(payload.activities || []).map((activity) => Number(activity.rowRevision || 1)));
+    await saveWorkPackage({ id: WORK_PACKAGE_ID, payload, revision: highestRevision });
+    await hydratePackage(payload);
+    return payload;
+  }, [hydratePackage]);
 
+  const markMutationApplied = useCallback((entry, result) => {
+    const activityId = Number(entry.entityId || entry.payload?.activityId);
+    if (Number.isInteger(Number(result?.rowRevision))) revisionRef.current[activityId] = Number(result.rowRevision);
+    setActivities((current) => current.map((activity) => {
+      if (Number(activity.id) !== activityId) return activity;
+      const next = { ...activity, rowRevision: Number(result?.rowRevision || activity.rowRevision) };
+      if (entry.operation === 'ACTUALIZAR_NOTAS') next.notasTecnico = result.notes ?? entry.payload.notes;
+      if (entry.operation === 'CERRAR_ACTIVIDAD') {
+        next.estado = result.state || 'cerrada';
+        next.bloqueada = result.locked ?? true;
+        next.fechaCierre = result.closedAt || new Date().toISOString();
+      }
+      if (entry.operation === 'GUARDAR_RESPUESTAS') {
+        next.matrices = (activity.matrices || []).map((assignment) => Number(assignment.id) === Number(entry.payload.assignmentId)
+          ? { ...assignment, estado: result.assignmentComplete ? 'completa' : 'pendiente' }
+          : assignment);
+      }
+      return next;
+    }));
+    setDraftState(activityId, (draft) => ({
+      ...draft,
+      baseRevision: Number(result?.rowRevision || draft.baseRevision),
+      dirty: {
+        notes: entry.operation === 'ACTUALIZAR_NOTAS' ? false : draft.dirty.notes,
+        matrices: entry.operation === 'GUARDAR_RESPUESTAS'
+          ? { ...draft.dirty.matrices, [entry.payload.assignmentId]: false }
+          : draft.dirty.matrices,
+      },
+    }));
+  }, [setDraftState]);
+
+  const syncNow = useCallback(async ({ silent = false } = {}) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (!silent) setNotice({ type: 'info', text: 'Sin conexión: el trabajo permanece guardado en este dispositivo.' });
+      return;
+    }
+    if (syncingRef.current) return;
     syncingRef.current = true;
     setSyncing(true);
-    setMessage('');
-
+    if (!silent) setNotice(null);
     try {
-      const jobs = await listSyncJobs();
-      for (const job of jobs) {
-        if (job.status === 'synced') continue;
-        await updateSyncJob(job.id, { status: 'syncing', attempts: (job.attempts || 0) + 1, error: '' });
-
-        const res = await fetch('/api/tecnico/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(job.payload),
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          await updateSyncJob(job.id, { status: 'error', error: data.error || 'Error de sincronización' });
-          continue;
+      const summary = await runOfflineSyncCoordinator(async (entry) => {
+        const activityId = Number(entry.entityId || entry.payload?.activityId);
+        if (entry.operation === 'SUBIR_IMAGEN') {
+          const expectedRevision = Number(revisionRef.current[activityId] || entry.payload.expectedRevision || entry.baseRevision);
+          const beforeUpload = await fetchJson('/api/tecnico/bootstrap');
+          const beforeActivity = beforeUpload.activities?.find((activity) => Number(activity.id) === activityId);
+          if (!beforeActivity) return { ok: false, retryable: false, error: 'La actividad dejó de estar disponible.' };
+          if (Number(beforeActivity.rowRevision) !== expectedRevision) {
+            await upsertOfflineSnapshot({
+              entity: 'technician-sync-conflict',
+              entityId: entry.id,
+              payload: {
+                status: 'conflict',
+                expectedRevision,
+                actualRevision: Number(beforeActivity.rowRevision),
+                serverSnapshot: beforeActivity,
+              },
+              revision: Number(beforeActivity.rowRevision),
+              baseRevision: expectedRevision,
+            });
+            return { ok: false, retryable: false, error: 'La actividad cambió antes de subir la fotografía.' };
+          }
+          const stored = await getOfflineBlob(entry.payload.blobId);
+          if (!stored?.blob) return { ok: false, retryable: false, error: 'La foto local ya no está disponible.' };
+          const formData = new FormData();
+          const file = typeof File !== 'undefined'
+            ? new File([stored.blob], entry.payload.name || 'imagen-actividad.jpg', { type: stored.type })
+            : stored.blob;
+          formData.append('file', file, entry.payload.name || 'imagen-actividad.jpg');
+          formData.append('clientActionId', entry.id);
+          formData.append('titulo', entry.payload.title || 'Evidencia en terreno');
+          formData.append('descripcion', entry.payload.description || '');
+          const uploadResponse = await fetch(`/api/ot-actividades/${activityId}/imagenes`, { method: 'POST', body: formData });
+          const uploadData = await uploadResponse.json().catch(() => ({}));
+          if (!uploadResponse.ok) {
+            return { ok: false, retryable: uploadResponse.status >= 500, error: uploadData.error || 'No se pudo subir la foto.' };
+          }
+          // La inserción del adjunto incrementa la revisión de la actividad. Se
+          // vuelve a leer antes de ejecutar cualquier dependencia posterior.
+          const refreshed = await fetchJson('/api/tecnico/bootstrap');
+          const serverActivity = refreshed.activities?.find((activity) => Number(activity.id) === activityId);
+          if (!serverActivity) return { ok: false, retryable: false, error: 'La actividad dejó de estar disponible.' };
+          revisionRef.current[activityId] = Number(serverActivity.rowRevision || 1);
+          await saveWorkPackage({ id: WORK_PACKAGE_ID, payload: refreshed, revision: Number(serverActivity.rowRevision || 1) });
+          await removeOfflineBlob(entry.payload.blobId);
+          setPendingPhotos((current) => {
+            const completed = (current[activityId] || []).find((photo) => photo.mutationId === entry.id);
+            if (completed?.previewUrl) {
+              URL.revokeObjectURL(completed.previewUrl);
+              previewUrlsRef.current.delete(completed.previewUrl);
+            }
+            return {
+              ...current,
+              [activityId]: (current[activityId] || []).filter((photo) => photo.mutationId !== entry.id),
+            };
+          });
+          return;
         }
 
-        await deleteSyncJob(job.id);
-      }
+        const expectedRevision = Number(revisionRef.current[activityId] || entry.payload.expectedRevision || entry.baseRevision);
+        const response = await fetch('/api/tecnico/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operation: entry.operation,
+            clientMutationId: entry.idempotencyKey,
+            activityId,
+            expectedRevision,
+            payload: entry.operation === 'ACTUALIZAR_NOTAS'
+              ? { notes: entry.payload.notes }
+              : entry.operation === 'GUARDAR_RESPUESTAS'
+                ? { assignmentId: entry.payload.assignmentId, answers: entry.payload.answers }
+                : {},
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (data.conflict || response.status === 409 && data.status === 'conflict') {
+            await upsertOfflineSnapshot({
+              entity: 'technician-sync-conflict',
+              entityId: entry.id,
+              payload: data,
+              revision: data.actualRevision || expectedRevision,
+              baseRevision: expectedRevision,
+            });
+          }
+          return {
+            ok: false,
+            retryable: data.retryable !== false,
+            retryAfterMs: data.retryAfterMs,
+            error: data.error || `Error HTTP ${response.status}`,
+          };
+        }
+        markMutationApplied(entry, data);
+        return;
+      }, { limit: 50 });
 
       await refreshQueue();
+      if (summary.succeeded > 0) await refreshFromServer({ silent: true });
+      if (!silent) {
+        if (summary.blocked > 0) setNotice({ type: 'error', text: 'Hay un conflicto. Actualice la actividad antes de continuar.' });
+        else if (summary.succeeded > 0) setNotice({ type: 'success', text: `${summary.succeeded} cambio(s) sincronizado(s).` });
+        else if (!summary.acquired) setNotice({ type: 'info', text: 'Otra pestaña está sincronizando esta jornada.' });
+      }
+    } catch (error) {
+      if (!silent) setNotice({ type: 'error', text: error.message || 'No se pudo sincronizar.' });
     } finally {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [refreshQueue]);
+  }, [markMutationApplied, refreshFromServer, refreshQueue]);
+
+  const enqueueForActivity = useCallback(async (activityId, operation, payload, { autoSync = true } = {}) => {
+    const existing = await listOfflineMutations({ rehydrate: 'reference' });
+    const sameActivity = existing.filter((entry) => Number(entry.entityId || entry.payload?.activityId) === Number(activityId));
+    if (sameActivity.some((entry) => entry.status === 'blocked')) {
+      throw new Error('La actividad tiene un conflicto pendiente y no admite nuevos cambios.');
+    }
+    const previous = sameActivity.at(-1);
+    const clientMutationId = createOfflineUuid();
+    await enqueueOfflineMutation({
+      id: clientMutationId,
+      clientMutationId,
+      idempotencyKey: clientMutationId,
+      operation,
+      entity: 'OrdenTrabajoActividad',
+      entityId: String(activityId),
+      payload: {
+        activityId: Number(activityId),
+        expectedRevision: Number(revisionRef.current[activityId] || 1),
+        ...payload,
+      },
+      dependsOn: previous ? [previous.id] : [],
+      baseRevision: Number(revisionRef.current[activityId] || 1),
+    });
+    await refreshQueue();
+    if (autoSync && navigator.onLine) void syncNow({ silent: true });
+    return clientMutationId;
+  }, [refreshQueue, syncNow]);
 
   useEffect(() => {
-    setOnline(navigator.onLine);
-    loadOptions().catch((error) => console.error('Error cargando app técnico:', error));
-    refreshQueue().catch((error) => console.error('Error cargando cola:', error));
+    let cancelled = false;
+    const initialize = async () => {
+      setOnline(navigator.onLine);
+      try {
+        if (navigator.onLine) {
+          const session = await fetchJson('/api/auth/session');
+          configureOfflinePartition({
+            tenantId: TENANT_ID,
+            userId: session.user.id,
+            technicianId: session.user.tecnicoId,
+            email: session.user.email,
+          });
+        } else if (!getActiveOfflineUser()) {
+          throw new Error('Conecte el dispositivo e inicie sesión una vez para habilitar el modo terreno.');
+        }
 
+        const cached = await getWorkPackage(WORK_PACKAGE_ID, { allowExpired: true }).catch(() => null);
+        if (cached?.payload && !cancelled) await hydratePackage(cached.payload);
+        await refreshQueue();
+        if (navigator.onLine && !cancelled) await refreshFromServer({ silent: Boolean(cached) });
+        if (navigator.onLine) {
+          fetchJson('/api/ia/notas-tecnico').then((status) => {
+            if (!cancelled) setOpenAI({ checked: true, enabled: Boolean(status.enabled ?? status.configured) });
+          }).catch(() => {
+            if (!cancelled) setOpenAI({ checked: true, enabled: false });
+          });
+        } else {
+          setOpenAI({ checked: true, enabled: false });
+        }
+        initializedRef.current = true;
+        if (navigator.onLine) void syncNow({ silent: true });
+      } catch (error) {
+        if (!cancelled) setNotice({ type: 'error', text: error.message });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void initialize();
+    return () => { cancelled = true; };
+  }, [hydratePackage, refreshFromServer, refreshQueue, syncNow]);
+
+  useEffect(() => {
     const handleOnline = () => {
       setOnline(true);
-      syncPending();
+      if (initializedRef.current) void syncNow({ silent: true });
     };
     const handleOffline = () => setOnline(false);
-
+    const handleFocus = () => {
+      if (navigator.onLine && initializedRef.current) void syncNow({ silent: true });
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
+    window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [loadOptions, refreshQueue, syncPending]);
+  }, [syncNow]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!initializedRef.current || !Object.keys(drafts).length) return undefined;
+    const timer = window.setTimeout(() => {
+      Object.values(drafts).forEach((draft) => {
+        void upsertOfflineSnapshot({
+          entity: DRAFT_ENTITY,
+          entityId: String(draft.activityId),
+          payload: draft,
+          revision: Number(revisionRef.current[draft.activityId] || draft.baseRevision || 1),
+          baseRevision: Number(draft.baseRevision || 1),
+        });
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [drafts]);
 
-    const setupCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = 160 * dpr;
-      const context = canvas.getContext('2d');
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      context.lineWidth = 2.2;
-      context.lineCap = 'round';
-      context.strokeStyle = '#111827';
-    };
-
-    setupCanvas();
-    window.addEventListener('resize', setupCanvas);
-    return () => window.removeEventListener('resize', setupCanvas);
+  useEffect(() => () => {
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrlsRef.current.clear();
   }, []);
 
-  const equiposDisponibles = form.clienteId
-    ? options.equipos.filter((equipo) => String(equipo.clienteId) === String(form.clienteId))
-    : options.equipos;
+  const selectedActivity = activities.find((activity) => Number(activity.id) === Number(selectedId)) || null;
+  const selectedDraft = selectedActivity ? drafts[selectedActivity.id] : null;
+  const selectedQueue = selectedActivity
+    ? queue.filter((entry) => Number(entry.entityId || entry.payload?.activityId) === Number(selectedActivity.id))
+    : [];
+  const conflictCount = queue.filter((entry) => entry.status === 'blocked').length;
 
-  const selectedEquipos = options.equipos.filter((equipo) => form.equipoIds.includes(String(equipo.id)));
+  const summary = useMemo(() => ({
+    open: activities.filter((activity) => activity.estado === 'abierta').length,
+    critical: activities.filter((activity) => activity.estado === 'abierta' && activity.ordenTrabajo?.prioridad === 'critica').length,
+    closed: activities.filter((activity) => activity.estado === 'cerrada').length,
+  }), [activities]);
 
-  const getClienteLabel = (cliente) => cliente?.nombre || '';
-  const getTecnicoLabel = (tecnico) => tecnico?.nombre || '';
-  const getServicioLabel = (servicio) => servicio?.descripcion || '';
-  const getEquipoLabel = (equipo) => {
-    if (!equipo) return '';
-    return [equipo.sku || equipo.codigoInterno || equipo.modelo, equipo.serial, equipo.nombre]
-      .filter(Boolean)
-      .join(' | ');
-  };
+  const sortedActivities = useMemo(() => [...activities].sort((left, right) => {
+    if (left.estado !== right.estado) return left.estado === 'abierta' ? -1 : 1;
+    const priority = { critica: 0, alta: 1, media: 2, baja: 3 };
+    const priorityDiff = (priority[left.ordenTrabajo?.prioridad] ?? 2) - (priority[right.ordenTrabajo?.prioridad] ?? 2);
+    if (priorityDiff) return priorityDiff;
+    return new Date(left.fechaProgramada || 8640000000000000) - new Date(right.fechaProgramada || 8640000000000000);
+  }), [activities]);
 
-  const handleComboChange = (field, value) => {
-    setComboText((prev) => ({ ...prev, [field]: value }));
+  const setNotes = (value) => setDraftState(selectedActivity.id, (draft) => ({
+    ...draft,
+    notes: value,
+    dirty: { ...draft.dirty, notes: true },
+  }));
 
-    if (field === 'cliente') {
-      const cliente = options.clientes.find((item) => getClienteLabel(item) === value);
-      setForm((prev) => ({
-        ...prev,
-        clienteId: cliente ? String(cliente.id) : '',
-        equipoIds: cliente && String(cliente.id) === String(prev.clienteId) ? prev.equipoIds : [],
-      }));
-      setComboText((prev) => ({ ...prev, equipo: '' }));
-    }
+  const setMatrixValue = (assignmentId, itemId, value) => setDraftState(selectedActivity.id, (draft) => ({
+    ...draft,
+    answers: {
+      ...draft.answers,
+      [assignmentId]: { ...draft.answers[assignmentId], [itemId]: value },
+    },
+    dirty: { ...draft.dirty, matrices: { ...draft.dirty.matrices, [assignmentId]: true } },
+  }));
 
-    if (field === 'tecnico') {
-      const tecnico = options.tecnicos.find((item) => getTecnicoLabel(item) === value);
-      setForm((prev) => ({
-        ...prev,
-        tecnicoId: tecnico ? String(tecnico.id) : '',
-        firmaTexto: tecnico ? (tecnico.firmaTexto || tecnico.nombre || prev.firmaTexto) : prev.firmaTexto,
-      }));
-    }
-
-    if (field === 'servicio') {
-      const servicio = options.servicios.find((item) => getServicioLabel(item) === value);
-      setForm((prev) => ({ ...prev, servicioId: servicio ? String(servicio.id) : '' }));
-    }
-  };
-
-  const addSelectedEquipo = () => {
-    const equipo = equiposDisponibles.find((item) => getEquipoLabel(item) === comboText.equipo);
-    if (!equipo) {
-      setMessage('Selecciona un equipo válido.');
-      return;
-    }
-    setForm((prev) => {
-      const key = String(equipo.id);
-      if (prev.equipoIds.includes(key)) return prev;
-      return { ...prev, equipoIds: [...prev.equipoIds, key] };
-    });
-    setComboText((prev) => ({ ...prev, equipo: '' }));
-  };
-
-  const removeSelectedEquipo = (equipoId) => {
-    setForm((prev) => ({ ...prev, equipoIds: prev.equipoIds.filter((id) => id !== String(equipoId)) }));
-  };
-
-  const addChecklistItem = () => {
-    const label = comboText.checklist.trim();
-    if (!label) return;
-    setForm((prev) => {
-      if (prev.checklist.some((item) => item.label.toLowerCase() === label.toLowerCase())) return prev;
-      return { ...prev, checklist: [...prev.checklist, { label, checked: true }] };
-    });
-    setComboText((prev) => ({ ...prev, checklist: '' }));
-  };
-
-  const removeChecklistItem = (index) => {
-    setForm((prev) => ({ ...prev, checklist: prev.checklist.filter((_, itemIndex) => itemIndex !== index) }));
-  };
-
-  const updateMeasurementDraft = (field, value) => {
-    setMeasurementDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const addMeasurement = () => {
-    const evaluated = evaluateMeasurement(measurementDraft);
-    const requiresExpected = measurementDraft.criterioModo === 'tolerancia'
-      && measurementDraft.criterioUnidad === 'medicion';
-    const requiresPercentBase = measurementDraft.criterioUnidad === 'porcentaje'
-      || measurementDraft.diferenciaModo === 'porcentaje';
-
-    if (!measurementDraft.variable.trim() || !measurementDraft.unidad.trim() || !measurementDraft.observado.trim()) {
-      setMessage('Completa variable, unidad y valor observado de la medición.');
-      return;
-    }
-
-    if (requiresExpected && !measurementDraft.programado.trim()) {
-      setMessage('Completa el valor programado para calcular la diferencia.');
-      return;
-    }
-
-    if (requiresPercentBase && !measurementDraft.programado.trim() && !measurementDraft.referencia.trim()) {
-      setMessage('Completa programado o base % para calcular el porcentaje.');
-      return;
-    }
-
-    if (!evaluated.criterio) {
-      setMessage('Completa el criterio de aceptación.');
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, mediciones: [...prev.mediciones, evaluated] }));
-    setMeasurementDraft(createEmptyMeasurement());
-    setMessage('');
-  };
-
-  const handleFiles = async (files, tipo = 'evidencia') => {
-    const attachments = await Promise.all(Array.from(files).map(async (file) => ({
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      tipo,
-      dataUrl: await fileToDataUrl(file),
-    })));
-
-    setForm((prev) => ({ ...prev, attachments: [...prev.attachments, ...attachments] }));
-  };
-
-  const handleImageFiles = async (files) => {
-    const imageAttachments = await Promise.all(Array.from(files).map(async (file) => ({
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      tipo: 'imagen_adjunta',
-      titulo: '',
-      descripcion: '',
-      dataUrl: await fileToDataUrl(file),
-    })));
-
-    setForm((prev) => ({ ...prev, imageAttachments: [...prev.imageAttachments, ...imageAttachments] }));
-  };
-
-  const updateImageAttachment = (index, field, value) => {
-    setForm((prev) => ({
-      ...prev,
-      imageAttachments: prev.imageAttachments.map((attachment, itemIndex) => (
-        itemIndex === index ? { ...attachment, [field]: value } : attachment
-      )),
-    }));
-  };
-
-  const removeImageAttachment = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      imageAttachments: prev.imageAttachments.filter((_, itemIndex) => itemIndex !== index),
-    }));
-  };
-
-  const toggleChecklist = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      checklist: prev.checklist.map((item, itemIndex) => (
-        itemIndex === index ? { ...item, checked: !item.checked } : item
-      )),
-    }));
-  };
-
-  const removeMeasurement = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      mediciones: prev.mediciones.filter((_, itemIndex) => itemIndex !== index),
-    }));
-  };
-
-  const startCamera = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setMessage('Cámara no disponible en este dispositivo.');
-      return null;
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' },
-      audio: false,
-    });
-    streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-    }
-    setCameraActive(true);
-    return stream;
-  };
-
-  const captureSelfie = async () => {
-    if (!streamRef.current) {
-      await startCamera();
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    }
-
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return '';
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext('2d');
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
-    setForm((prev) => ({ ...prev, selfieDataUrl: dataUrl }));
-    return dataUrl;
-  };
-
-  const getCanvasPoint = (event) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-  };
-
-  const startDrawing = (event) => {
-    drawingRef.current = true;
-    const point = getCanvasPoint(event);
-    const context = canvasRef.current.getContext('2d');
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-  };
-
-  const draw = (event) => {
-    if (!drawingRef.current) return;
-    const point = getCanvasPoint(event);
-    const context = canvasRef.current.getContext('2d');
-    context.lineTo(point.x, point.y);
-    context.stroke();
-  };
-
-  const stopDrawing = () => {
-    drawingRef.current = false;
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    context.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const saveService = async (event) => {
-    event.preventDefault();
-    const mediciones = form.mediciones.filter(hasMeasurementData);
-    const hasInstrumentCertificate = form.attachments.some((attachment) => attachment.tipo === 'certificado_instrumento');
-
-    if (!form.tecnicoId || !form.clienteId || !form.servicioId) {
-      setMessage('Selecciona técnico, cliente y servicio desde los cuadros combinados.');
-      return;
-    }
-
-    if (!form.equipoIds.length) {
-      setMessage('Selecciona al menos un equipo.');
-      return;
-    }
-
-    if (!form.objetivo.trim() || !form.especificaciones.trim()) {
-      setMessage('Completa objetivo y especificaciones.');
-      return;
-    }
-
-    if (!mediciones.length) {
-      setMessage('Registra al menos una medición.');
-      return;
-    }
-
-    if (!form.certificadoInstrumentos.trim() && !hasInstrumentCertificate) {
-      setMessage('Registra los certificados de instrumentos usados.');
-      return;
-    }
-
-    if (!form.codigoInstrumento.trim() || !form.codigoServicio.trim()) {
-      setMessage('Registra código de instrumento y código de servicio.');
-      return;
-    }
-
-    const signedAt = new Date().toISOString();
-    let selfieDataUrl = '';
+  const saveNotes = async () => {
     try {
-      selfieDataUrl = await captureSelfie();
+      await enqueueForActivity(selectedActivity.id, 'ACTUALIZAR_NOTAS', { notes: selectedDraft.notes || '' });
+      setNotice({ type: 'success', text: online ? 'Notas guardadas y listas para sincronizar.' : 'Notas guardadas en el dispositivo.' });
     } catch (error) {
-      setMessage(`No se pudo capturar la foto frontal: ${error.message}`);
-      return;
+      setNotice({ type: 'error', text: error.message });
     }
-    if (!selfieDataUrl) {
-      setMessage('La foto frontal es requerida para firmar.');
-      return;
-    }
-    const firmaImagenDataUrl = canvasRef.current.toDataURL('image/png');
-    const clientMutationId = crypto.randomUUID();
-
-    await enqueueSyncJob({
-      ...form,
-      clientMutationId,
-      descripcion: form.trabajoRealizado,
-      objetivo: form.objetivo.trim(),
-      especificaciones: form.especificaciones.trim(),
-      trabajoRealizado: form.trabajoRealizado.trim(),
-      checklist: form.checklist.map((item) => ({ label: item.label, checked: Boolean(item.checked) })),
-      mediciones,
-      certificadoInstrumentos: form.certificadoInstrumentos.trim(),
-      codigoInstrumento: form.codigoInstrumento.trim(),
-      codigoServicio: form.codigoServicio.trim(),
-      attachments: [
-        ...form.attachments,
-        ...form.imageAttachments.map((attachment, index) => ({
-          ...attachment,
-          titulo: attachment.titulo.trim() || `Imagen ${index + 1}`,
-          descripcion: attachment.descripcion.trim(),
-        })),
-      ],
-      equipoIds: form.equipoIds.map((id) => Number(id)),
-      tecnicoId: Number(form.tecnicoId),
-      clienteId: Number(form.clienteId),
-      servicioId: Number(form.servicioId),
-      fecha: form.fecha ? new Date(form.fecha).toISOString() : signedAt,
-      signedAt,
-      firmaImagenDataUrl,
-      selfieDataUrl,
-      createdAt: signedAt,
-    });
-
-    setForm((prev) => ({
-      ...createEmptyForm(),
-      tecnicoId: prev.tecnicoId,
-      firmaTexto: prev.firmaTexto,
-      fecha: new Date().toISOString().slice(0, 16),
-    }));
-    setComboText((prev) => ({
-      ...prev,
-      cliente: '',
-      servicio: '',
-      equipo: '',
-      checklist: '',
-    }));
-    setMeasurementDraft(createEmptyMeasurement());
-    clearSignature();
-    await refreshQueue();
-    setMessage('Servicio guardado en cola.');
-    syncPending();
   };
 
-  const draftEvaluation = evaluateMeasurement(measurementDraft);
+  const saveMatrix = async (assignment) => {
+    const missing = missingItems(assignment, selectedDraft);
+    if (assignment.obligatoria && missing.length) {
+      setNotice({ type: 'error', text: `Complete ${missing.length} respuesta(s) obligatoria(s) de la matriz.` });
+      return;
+    }
+    const answers = buildAnswerPayload(assignment, selectedDraft);
+    if (!answers.length) {
+      setNotice({ type: 'error', text: 'Registre al menos una respuesta antes de guardar.' });
+      return;
+    }
+    try {
+      await enqueueForActivity(selectedActivity.id, 'GUARDAR_RESPUESTAS', { assignmentId: Number(assignment.id), answers });
+      setNotice({ type: 'success', text: online ? 'Matriz guardada y lista para sincronizar.' : 'Matriz guardada en el dispositivo.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    }
+  };
+
+  const queuePhotos = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!selectedActivity || !files.length) return;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setNotice({ type: 'error', text: `${file.name}: sólo se permiten imágenes.` });
+        continue;
+      }
+      if (file.size > 12 * 1024 * 1024) {
+        setNotice({ type: 'error', text: `${file.name}: supera el máximo de 12 MB.` });
+        continue;
+      }
+      const blobId = createOfflineUuid();
+      const previewUrl = URL.createObjectURL(file);
+      previewUrlsRef.current.add(previewUrl);
+      await putOfflineBlob({ id: blobId, blob: file, ownerId: `activity:${selectedActivity.id}`, name: file.name });
+      try {
+        const mutationId = await enqueueForActivity(selectedActivity.id, 'SUBIR_IMAGEN', {
+          blobId,
+          name: file.name,
+          type: file.type,
+          title: 'Evidencia en terreno',
+        }, { autoSync: false });
+        setPendingPhotos((current) => ({
+          ...current,
+          [selectedActivity.id]: [...(current[selectedActivity.id] || []), { mutationId, blobId, name: file.name, previewUrl }],
+        }));
+      } catch (error) {
+        await removeOfflineBlob(blobId);
+        URL.revokeObjectURL(previewUrl);
+        previewUrlsRef.current.delete(previewUrl);
+        setNotice({ type: 'error', text: error.message });
+      }
+    }
+    await refreshQueue();
+    if (navigator.onLine) void syncNow({ silent: true });
+  };
+
+  const improveNotes = async () => {
+    if (!openAI.enabled || !online || !selectedActivity) return;
+    setAiLoading(true);
+    try {
+      const result = await fetchJson('/api/ia/notas-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actividadId: selectedActivity.id, notas: selectedDraft.notes }),
+      });
+      setNotes(result.text);
+      setNotice({ type: 'success', text: 'Propuesta aplicada. Revísela y guarde las notas.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const closeActivity = async () => {
+    const missing = (selectedActivity.matrices || [])
+      .filter((assignment) => assignment.obligatoria)
+      .flatMap((assignment) => missingItems(assignment, selectedDraft));
+    if (missing.length) {
+      setNotice({ type: 'error', text: `No puede cerrar: faltan ${missing.length} respuesta(s) obligatoria(s).` });
+      return;
+    }
+    const unsaved = (selectedActivity.matrices || []).filter((assignment) => assignment.obligatoria).filter((assignment) => (
+      selectedDraft.dirty?.matrices?.[assignment.id]
+      && !selectedQueue.some((entry) => entry.operation === 'GUARDAR_RESPUESTAS'
+        && Number(entry.payload?.assignmentId) === Number(assignment.id))
+    ));
+    if (unsaved.length) {
+      setNotice({ type: 'error', text: 'Guarde las matrices modificadas antes de cerrar la actividad.' });
+      return;
+    }
+    try {
+      await enqueueForActivity(selectedActivity.id, 'CERRAR_ACTIVIDAD', {});
+      setNotice({ type: 'success', text: online ? 'Cierre en proceso de sincronización.' : 'Cierre guardado; se aplicará al recuperar conexión.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    }
+  };
+
+  const mandatoryMissing = selectedActivity && selectedDraft
+    ? (selectedActivity.matrices || []).filter((assignment) => assignment.obligatoria)
+      .reduce((total, assignment) => total + missingItems(assignment, selectedDraft).length, 0)
+    : 0;
+  const mandatoryUnsaved = selectedActivity && selectedDraft
+    ? (selectedActivity.matrices || []).filter((assignment) => assignment.obligatoria).filter((assignment) => (
+      selectedDraft.dirty?.matrices?.[assignment.id]
+      && !selectedQueue.some((entry) => entry.operation === 'GUARDAR_RESPUESTAS'
+        && Number(entry.payload?.assignmentId) === Number(assignment.id))
+    )).length
+    : 0;
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-5xl space-y-5">
-        <header className="panel flex flex-wrap items-center justify-between gap-3 p-5">
-          <div>
-            <p className="text-[0.82rem] uppercase tracking-[0.16em] text-neutral-500">Técnico</p>
-            <h1 className="mt-1 text-[1.45rem] font-semibold text-neutral-900">Ingreso de servicio</h1>
+    <main className={`min-h-screen technician-workspace ${selectedActivity ? 'has-selection' : ''}`}>
+      <header className="technician-topbar">
+        <div>
+          <span className="technician-eyebrow">CMC · Servicio técnico</span>
+          <h1>Mi jornada</h1>
+        </div>
+        <div className="technician-topbar__actions">
+          <span className={`technician-connectivity ${online ? 'is-online' : 'is-offline'}`}><i />{online ? 'En línea' : 'Sin conexión'}</span>
+          <span className="technician-queue-count">{queue.length} en cola</span>
+          {conflictCount ? <span className="technician-conflict-count">{conflictCount} conflicto(s)</span> : null}
+          <button type="button" onClick={() => void syncNow()} disabled={!online || syncing} className="technician-sync-button">{syncing ? 'Sincronizando…' : 'Sincronizar'}</button>
+          <Link href="/" className="technician-home-link">Panel 360</Link>
+        </div>
+      </header>
+
+      {notice ? <div className={`technician-notice is-${notice.type}`} role="status">{notice.text}<button type="button" onClick={() => setNotice(null)} aria-label="Cerrar aviso">×</button></div> : null}
+
+      <div className="technician-layout">
+        <aside className="technician-day-list">
+          <div className="technician-day-summary">
+            <div><strong>{summary.open}</strong><span>Abiertas</span></div>
+            <div><strong>{summary.critical}</strong><span>Críticas</span></div>
+            <div><strong>{summary.closed}</strong><span>Cerradas</span></div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`rounded-full px-3 py-1 text-[0.78rem] font-semibold ${online ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {online ? 'Online' : 'Offline'}
-            </span>
-            <button type="button" onClick={syncPending} disabled={!online || syncing} className="rounded-lg bg-neutral-900 px-3 py-2 text-[0.82rem] font-semibold text-white disabled:opacity-50">
-              {syncing ? 'Sincronizando' : `Cola ${queue.length}`}
-            </button>
+          <div className="technician-list-heading"><h2>Actividades asignadas</h2><span>{activities.length}</span></div>
+          {loading && !activities.length ? <div className="technician-empty">Preparando jornada…</div> : null}
+          {!loading && !activities.length ? <div className="technician-empty"><strong>Sin actividades asignadas</strong><span>Cuando Operaciones asigne una actividad aparecerá aquí.</span></div> : null}
+          <div className="technician-cards">
+            {sortedActivities.map((activity) => {
+              const activityQueue = queue.filter((entry) => Number(entry.entityId || entry.payload?.activityId) === Number(activity.id));
+              return (
+                <button type="button" key={activity.id} onClick={() => setSelectedId(activity.id)} className={`technician-card ${Number(selectedId) === Number(activity.id) ? 'is-active' : ''}`}>
+                  <div className="technician-card__top"><span className={`priority is-${activity.ordenTrabajo?.prioridad || 'media'}`}>{priorityLabel(activity.ordenTrabajo?.prioridad)}</span><QueueBadge entries={activityQueue} /></div>
+                  <strong>{activity.titulo}</strong>
+                  <span>{activity.ordenTrabajo?.codigo || `OT ${activity.ordenTrabajoId}`} · {activity.ordenTrabajo?.cliente?.nombre || 'Cliente'}</span>
+                  <small>{formatDate(activity.fechaProgramada)}{activity.tecnico?.nombre ? ` · ${activity.tecnico.nombre}` : ''}</small>
+                </button>
+              );
+            })}
           </div>
-        </header>
+        </aside>
 
-        <form onSubmit={saveService} className="grid gap-5 lg:grid-cols-[1fr_320px]">
-          <section className="panel space-y-5 p-5">
-            <datalist id="tecnico-options">
-              {options.tecnicos.map((tecnico) => <option key={tecnico.id} value={getTecnicoLabel(tecnico)} />)}
-            </datalist>
-            <datalist id="cliente-options">
-              {options.clientes.map((cliente) => <option key={cliente.id} value={getClienteLabel(cliente)} />)}
-            </datalist>
-            <datalist id="servicio-options">
-              {options.servicios.map((servicio) => <option key={servicio.id} value={getServicioLabel(servicio)} />)}
-            </datalist>
-            <datalist id="equipo-options">
-              {equiposDisponibles.map((equipo) => <option key={equipo.id} value={getEquipoLabel(equipo)} />)}
-            </datalist>
-            <datalist id="checklist-options">
-              {checklistTemplate.map((item) => <option key={item} value={item} />)}
-            </datalist>
-            <datalist id="variable-options">
-              {variableOptions.map((item) => <option key={item} value={item} />)}
-            </datalist>
-            <datalist id="unit-options">
-              {unitOptions.map((item) => <option key={item} value={item} />)}
-            </datalist>
-
-            <div>
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">DATOS DEL EQUIPO</h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Técnico
-                  <input list="tecnico-options" value={comboText.tecnico} onChange={(event) => handleComboChange('tecnico', event.target.value)} className="input-base mt-1" required />
-                </label>
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Fecha
-                  <input type="datetime-local" value={form.fecha} onChange={(event) => setForm((prev) => ({ ...prev, fecha: event.target.value }))} className="input-base mt-1" required />
-                </label>
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Cliente
-                  <input list="cliente-options" value={comboText.cliente} onChange={(event) => handleComboChange('cliente', event.target.value)} className="input-base mt-1" required />
-                </label>
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Servicio
-                  <input list="servicio-options" value={comboText.servicio} onChange={(event) => handleComboChange('servicio', event.target.value)} className="input-base mt-1" required />
-                </label>
-              </div>
-
-              <div className="mt-3">
-                <p className="mb-2 text-[0.85rem] font-medium text-neutral-700">Equipos</p>
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                  <input list="equipo-options" value={comboText.equipo} onChange={(event) => setComboText((prev) => ({ ...prev, equipo: event.target.value }))} className="input-base" />
-                  <button type="button" onClick={addSelectedEquipo} className="rounded-lg border border-neutral-300 px-3 py-2 text-[0.84rem] font-medium text-neutral-800">Agregar</button>
+        <section className="technician-detail">
+          {!selectedActivity || !selectedDraft ? (
+            <div className="technician-detail-empty"><span>360°</span><h2>Seleccione una actividad</h2><p>Notas, matrices, fotos y cierre permanecen juntos en el contexto de la actividad.</p></div>
+          ) : (
+            <>
+              <div className="technician-detail-header">
+                <button type="button" className="technician-back" onClick={() => setSelectedId(null)}>← Jornada</button>
+                <div className="technician-detail-title">
+                  <span>{selectedActivity.ordenTrabajo?.codigo || `OT ${selectedActivity.ordenTrabajoId}`}</span>
+                  <h2>{selectedActivity.titulo}</h2>
+                  <p>{selectedActivity.descripcionBreve || 'Sin descripción breve.'}</p>
                 </div>
-                {selectedEquipos.length ? (
-                  <div className="mt-3 grid gap-2">
-                    {selectedEquipos.map((equipo) => (
-                      <div key={equipo.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[0.86rem] text-neutral-700">
-                        <span>{getEquipoLabel(equipo)}</span>
-                        <button type="button" onClick={() => removeSelectedEquipo(equipo.id)} className="text-[0.78rem] font-semibold text-rose-700">Quitar</button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block text-[0.85rem] font-medium text-neutral-700">
-                OBJETIVO
-                <textarea value={form.objetivo} onChange={(event) => setForm((prev) => ({ ...prev, objetivo: event.target.value }))} className="input-base mt-1 min-h-24" required />
-              </label>
-              <label className="block text-[0.85rem] font-medium text-neutral-700">
-                ESPECIFICACIONES
-                <textarea value={form.especificaciones} onChange={(event) => setForm((prev) => ({ ...prev, especificaciones: event.target.value }))} className="input-base mt-1 min-h-24" required />
-              </label>
-            </div>
-
-            <label className="block text-[0.85rem] font-medium text-neutral-700">
-              I. TRABAJOS REALIZADOS Y REPORTES
-              <textarea value={form.trabajoRealizado} onChange={(event) => setForm((prev) => ({ ...prev, trabajoRealizado: event.target.value }))} className="input-base mt-1 min-h-32" required />
-            </label>
-
-            <div>
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">II. ESTADO INICIAL</h2>
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <input list="checklist-options" value={comboText.checklist} onChange={(event) => setComboText((prev) => ({ ...prev, checklist: event.target.value }))} className="input-base" />
-                <button type="button" onClick={addChecklistItem} className="rounded-lg border border-neutral-300 px-3 py-2 text-[0.84rem] font-medium text-neutral-800">Agregar</button>
-              </div>
-              <div className="mt-3 grid gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                {form.checklist.map((item, index) => (
-                  <div key={`${item.label}-${index}`} className="flex flex-wrap items-center justify-between gap-2 text-[0.88rem] text-neutral-700">
-                    <label className="flex min-w-0 flex-1 items-center gap-2">
-                      <input type="checkbox" checked={item.checked} onChange={() => toggleChecklist(index)} />
-                      <span className="min-w-0">{item.label}</span>
-                    </label>
-                    <button type="button" onClick={() => removeChecklistItem(index)} className="text-[0.78rem] font-semibold text-rose-700">Quitar</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-[1rem] font-semibold text-neutral-900">III. REPORTES DE MEDICIÓN</h2>
-                <button type="button" onClick={addMeasurement} className="rounded-lg border border-neutral-300 px-3 py-2 text-[0.8rem] font-medium text-neutral-800">Agregar</button>
+                <QueueBadge entries={selectedQueue} />
               </div>
 
-              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                <div className="grid gap-3 md:grid-cols-4">
-                  <label className="block text-[0.82rem] font-medium text-neutral-700 md:col-span-2">
-                    Variable
-                    <input list="variable-options" value={measurementDraft.variable} onChange={(event) => updateMeasurementDraft('variable', event.target.value)} className="input-base mt-1" />
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Unidad
-                    <input list="unit-options" value={measurementDraft.unidad} onChange={(event) => updateMeasurementDraft('unidad', event.target.value)} className="input-base mt-1" />
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Diferencia
-                    <select value={measurementDraft.diferenciaModo} onChange={(event) => updateMeasurementDraft('diferenciaModo', event.target.value)} className="input-base mt-1">
-                      <option value="unidad">Unidad</option>
-                      <option value="porcentaje">%</option>
-                    </select>
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Programado
-                    <input type="number" inputMode="decimal" step="any" value={measurementDraft.programado} onChange={(event) => updateMeasurementDraft('programado', event.target.value)} className="input-base mt-1" />
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Observado
-                    <input type="number" inputMode="decimal" step="any" value={measurementDraft.observado} onChange={(event) => updateMeasurementDraft('observado', event.target.value)} className="input-base mt-1" />
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Base %
-                    <input type="number" inputMode="decimal" step="any" value={measurementDraft.referencia} onChange={(event) => updateMeasurementDraft('referencia', event.target.value)} className="input-base mt-1" />
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Resultado
-                    <input value={draftEvaluation.diferencia || ''} readOnly className="input-base mt-1 bg-white text-neutral-600" />
-                  </label>
-                </div>
-
-                <div className="mt-3 grid gap-3 md:grid-cols-4">
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Condición
-                    <select value={measurementDraft.criterioModo} onChange={(event) => updateMeasurementDraft('criterioModo', event.target.value)} className="input-base mt-1">
-                      <option value="tolerancia">±</option>
-                      <option value="rango">Mín / máx</option>
-                      <option value="maximo">Máximo</option>
-                      <option value="minimo">Mínimo</option>
-                    </select>
-                  </label>
-                  <label className="block text-[0.82rem] font-medium text-neutral-700">
-                    Unidad criterio
-                    <select value={measurementDraft.criterioUnidad} onChange={(event) => updateMeasurementDraft('criterioUnidad', event.target.value)} className="input-base mt-1">
-                      <option value="medicion">Medición</option>
-                      <option value="porcentaje">%</option>
-                    </select>
-                  </label>
-
-                  {measurementDraft.criterioModo === 'tolerancia' ? (
-                    <>
-                      <label className="block text-[0.82rem] font-medium text-neutral-700">
-                        -
-                        <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMenos} onChange={(event) => updateMeasurementDraft('criterioMenos', event.target.value)} className="input-base mt-1" />
-                      </label>
-                      <label className="block text-[0.82rem] font-medium text-neutral-700">
-                        +
-                        <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMas} onChange={(event) => updateMeasurementDraft('criterioMas', event.target.value)} className="input-base mt-1" />
-                      </label>
-                    </>
-                  ) : null}
-
-                  {measurementDraft.criterioModo === 'rango' ? (
-                    <>
-                      <label className="block text-[0.82rem] font-medium text-neutral-700">
-                        Mín
-                        <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMin} onChange={(event) => updateMeasurementDraft('criterioMin', event.target.value)} className="input-base mt-1" />
-                      </label>
-                      <label className="block text-[0.82rem] font-medium text-neutral-700">
-                        Máx
-                        <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMax} onChange={(event) => updateMeasurementDraft('criterioMax', event.target.value)} className="input-base mt-1" />
-                      </label>
-                    </>
-                  ) : null}
-
-                  {measurementDraft.criterioModo === 'maximo' ? (
-                    <label className="block text-[0.82rem] font-medium text-neutral-700 md:col-span-2">
-                      Máx
-                      <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMax} onChange={(event) => updateMeasurementDraft('criterioMax', event.target.value)} className="input-base mt-1" />
-                    </label>
-                  ) : null}
-
-                  {measurementDraft.criterioModo === 'minimo' ? (
-                    <label className="block text-[0.82rem] font-medium text-neutral-700 md:col-span-2">
-                      Mín
-                      <input type="number" inputMode="decimal" step="any" value={measurementDraft.criterioMin} onChange={(event) => updateMeasurementDraft('criterioMin', event.target.value)} className="input-base mt-1" />
-                    </label>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 grid gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-[0.82rem] text-neutral-700">
-                  <div><span className="font-semibold">Cumple:</span> {draftEvaluation.cumple}</div>
-                  <div><span className="font-semibold">Criterio:</span> {draftEvaluation.criterio || '-'}</div>
-                </div>
-              </div>
-
-              {form.mediciones.length ? (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200">
-                  <table className="min-w-full divide-y divide-neutral-200 text-left text-[0.82rem]">
-                    <thead className="bg-neutral-50 text-neutral-600">
-                      <tr>
-                        <th className="px-3 py-2 font-semibold">Variable</th>
-                        <th className="px-3 py-2 font-semibold">Prog.</th>
-                        <th className="px-3 py-2 font-semibold">Obs.</th>
-                        <th className="px-3 py-2 font-semibold">Dif.</th>
-                        <th className="px-3 py-2 font-semibold">OK</th>
-                        <th className="px-3 py-2 font-semibold">Criterio</th>
-                        <th className="px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100 bg-white">
-                      {form.mediciones.map((measurement, index) => (
-                        <tr key={`${measurement.variable}-${index}`}>
-                          <td className="px-3 py-2">{buildMeasurementLabel(measurement)}</td>
-                          <td className="px-3 py-2">{measurement.programado || '-'}</td>
-                          <td className="px-3 py-2">{measurement.observado || '-'}</td>
-                          <td className="px-3 py-2">{measurement.diferencia || '-'}</td>
-                          <td className="px-3 py-2">{measurement.cumple || '-'}</td>
-                          <td className="max-w-[260px] px-3 py-2">{measurement.criterio || '-'}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button type="button" onClick={() => removeMeasurement(index)} className="font-semibold text-rose-700">Quitar</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              {selectedQueue.some((entry) => entry.status === 'blocked') ? (
+                <div className="technician-conflict-panel"><strong>Conflicto de revisión</strong><p>La actividad cambió en el servidor. No se enviarán nuevos cambios hasta que Operaciones revise el conflicto.</p></div>
               ) : null}
-            </div>
 
-            <div>
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">IV. CONSIDERACIONES</h2>
-              <label className="block text-[0.85rem] font-medium text-neutral-700">
-                Certificados de los instrumentos que usaste
-                <textarea value={form.certificadoInstrumentos} onChange={(event) => setForm((prev) => ({ ...prev, certificadoInstrumentos: event.target.value }))} className="input-base mt-1 min-h-28" />
-              </label>
-              <input type="file" accept="image/*,application/pdf" capture="environment" multiple onChange={(event) => handleFiles(event.target.files || [], 'certificado_instrumento')} className="input-base mt-3" />
-              {form.attachments.length ? (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {form.attachments.map((attachment, index) => (
-                    <div key={`${attachment.name}-${index}`} className="rounded-lg border border-neutral-200 bg-white p-2 text-[0.82rem] text-neutral-700">
-                      {attachment.name}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div>
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">V. CÓDIGO INSTRUMENTO Y CÓDIGO DEL SERVICIO</h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Código instrumento
-                  <input value={form.codigoInstrumento} onChange={(event) => setForm((prev) => ({ ...prev, codigoInstrumento: event.target.value }))} className="input-base mt-1" required />
-                </label>
-                <label className="block text-[0.85rem] font-medium text-neutral-700">
-                  Código del servicio
-                  <input value={form.codigoServicio} onChange={(event) => setForm((prev) => ({ ...prev, codigoServicio: event.target.value }))} className="input-base mt-1" required />
-                </label>
+              <div className="technician-context-grid">
+                <article><span>Cliente</span><strong>{selectedActivity.ordenTrabajo?.cliente?.nombre || 'Sin cliente'}</strong><small>{selectedActivity.ordenTrabajo?.cliente?.direccion || selectedActivity.ordenTrabajo?.cliente?.telefono || 'Sin contacto registrado'}</small></article>
+                <article><span>Equipo</span><strong>{selectedActivity.ordenTrabajo?.equipos?.[0]?.nombre || 'Sin equipo asociado'}</strong><small>{[selectedActivity.ordenTrabajo?.equipos?.[0]?.modelo, selectedActivity.ordenTrabajo?.equipos?.[0]?.serial].filter(Boolean).join(' · ') || 'Sin modelo/serie'}</small></article>
+                <article><span>Programación</span><strong>{formatDate(selectedActivity.fechaProgramada)}</strong><small>{priorityLabel(selectedActivity.ordenTrabajo?.prioridad)} · {selectedActivity.estado}</small></article>
               </div>
-            </div>
 
-            <div>
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">IMÁGENES ADJUNTAS</h2>
-              <input type="file" accept="image/*" capture="environment" multiple onChange={(event) => handleImageFiles(event.target.files || [])} className="input-base" />
-              {form.imageAttachments.length ? (
-                <div className="mt-3 space-y-3">
-                  {form.imageAttachments.map((attachment, index) => (
-                    <div key={`${attachment.name}-${index}`} className="grid gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 sm:grid-cols-[120px_1fr]">
-                      <Image src={attachment.dataUrl} alt={attachment.titulo || attachment.name} width={120} height={90} unoptimized className="h-24 w-full rounded-md border border-neutral-200 bg-white object-cover sm:w-28" />
-                      <div className="space-y-2">
-                        <input value={attachment.titulo} onChange={(event) => updateImageAttachment(index, 'titulo', event.target.value)} className="input-base" placeholder="Título" />
-                        <textarea value={attachment.descripcion} onChange={(event) => updateImageAttachment(index, 'descripcion', event.target.value)} className="input-base min-h-20" placeholder="Descripción breve" />
-                        <button type="button" onClick={() => removeImageAttachment(index)} className="rounded-lg border border-neutral-300 px-3 py-2 text-[0.8rem] font-medium text-neutral-800">Quitar imagen</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          <aside className="space-y-5">
-            <section className="panel p-5">
-              <h2 className="mb-3 text-[1rem] font-semibold text-neutral-900">Firma</h2>
-              <input value={form.firmaTexto} onChange={(event) => setForm((prev) => ({ ...prev, firmaTexto: event.target.value }))} className="input-base mb-3" placeholder="Texto firma" required />
-              <canvas
-                ref={canvasRef}
-                className="h-40 w-full touch-none rounded-lg border border-neutral-300 bg-white"
-                onPointerDown={startDrawing}
-                onPointerMove={draw}
-                onPointerUp={stopDrawing}
-                onPointerLeave={stopDrawing}
-              />
-              <button type="button" onClick={clearSignature} className="mt-3 rounded-lg border border-neutral-300 px-3 py-2 text-[0.82rem] font-medium text-neutral-800">Limpiar firma</button>
-            </section>
-
-            <section className="panel p-5">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-[1rem] font-semibold text-neutral-900">Foto frontal</h2>
-                <button type="button" onClick={startCamera} className="rounded-lg bg-neutral-900 px-3 py-2 text-[0.78rem] font-semibold text-white">Cámara</button>
+              <div className="technician-progress">
+                <div><span>Notas</span><strong>{selectedDraft.notes.trim() ? 'Registradas' : 'Pendientes'}</strong></div>
+                <div><span>Matrices</span><strong>{(selectedActivity.matrices || []).filter((assignment) => !missingItems(assignment, selectedDraft).length).length}/{selectedActivity.matrices?.length || 0}</strong></div>
+                <div><span>Fotos</span><strong>{(selectedActivity.adjuntos?.length || 0) + (pendingPhotos[selectedActivity.id]?.length || 0)}</strong></div>
+                <div><span>Cierre</span><strong>{selectedActivity.estado === 'cerrada' ? 'Cerrada' : mandatoryMissing ? `${mandatoryMissing} pendiente(s)` : mandatoryUnsaved ? 'Guardar matrices' : 'Disponible'}</strong></div>
               </div>
-              <video ref={videoRef} playsInline muted className={`h-48 w-full rounded-lg border border-neutral-200 bg-neutral-950 object-cover ${cameraActive ? 'block' : 'hidden'}`} />
-              {form.selfieDataUrl ? <Image src={form.selfieDataUrl} alt="Foto técnico" width={320} height={180} unoptimized className="mt-3 h-40 w-full rounded-lg border border-neutral-200 object-cover" /> : null}
-            </section>
 
-            <button type="submit" className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-[0.95rem] font-semibold text-white">
-              Firmar y guardar
-            </button>
-          </aside>
-        </form>
+              <article className="technician-panel">
+                <div className="technician-panel__heading"><div><span>Paso 1</span><h3>Notas técnicas</h3></div>{openAI.enabled ? <button type="button" className="technician-ai-button" onClick={() => void improveNotes()} disabled={!online || aiLoading || !selectedDraft.notes.trim() || selectedActivity.bloqueada}>{aiLoading ? 'Puliendo…' : 'Pulir con IA'}</button> : null}</div>
+                <textarea value={selectedDraft.notes} onChange={(event) => setNotes(event.target.value)} disabled={selectedActivity.bloqueada} className="input-base technician-notes" placeholder="Hallazgos, diagnóstico, trabajo ejecutado y recomendaciones…" maxLength={20000} />
+                {!openAI.enabled && openAI.checked ? <p className="technician-ai-pending">Asistencia de redacción pendiente de credenciales OpenAI.</p> : null}
+                <div className="technician-panel__footer"><span>{selectedDraft.notes.length}/20.000</span><button type="button" onClick={() => void saveNotes()} disabled={selectedActivity.bloqueada || selectedQueue.some((entry) => entry.status === 'blocked')}>Guardar notas</button></div>
+              </article>
 
-        {message ? <p className="panel p-3 text-[0.9rem] text-neutral-700">{message}</p> : null}
-
-        {queue.length ? (
-          <section className="panel p-5">
-            <h2 className="mb-3 text-[1.05rem] font-semibold text-neutral-900">Cola local</h2>
-            <div className="space-y-2">
-              {queue.map((job) => (
-                <div key={job.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-[0.86rem]">
-                  <span>{new Date(job.createdAt).toLocaleString('es-CL')} | {String(job.payload.trabajoRealizado || job.payload.descripcion || '').slice(0, 80)}</span>
-                  <span className="font-semibold text-neutral-700">{job.status}</span>
+              <article className="technician-panel">
+                <div className="technician-panel__heading"><div><span>Paso 2</span><h3>Matrices de cumplimiento</h3></div><small>{selectedActivity.matrices?.length || 0} asignada(s)</small></div>
+                {!selectedActivity.matrices?.length ? <div className="technician-empty compact">Esta actividad no tiene matrices asignadas.</div> : null}
+                <div className="technician-matrices">
+                  {(selectedActivity.matrices || []).map((assignment) => {
+                    const missing = missingItems(assignment, selectedDraft);
+                    return (
+                      <section key={assignment.id} className="technician-matrix">
+                        <header><div><strong>{assignment.matrizNombreSnapshot || assignment.definitionSnapshot?.nombre || 'Matriz'}</strong><span>v{assignment.matrizVersion || assignment.definitionSnapshot?.version || 1} · {assignment.matrizCategoria === 'evaluacion' ? 'Evaluación' : 'Informe / resultado'}</span></div><span className={missing.length ? 'is-incomplete' : 'is-complete'}>{assignment.obligatoria ? 'Obligatoria' : 'Opcional'} · {missing.length ? `${missing.length} pendiente(s)` : 'Completa'}</span></header>
+                        <div className="technician-matrix-items">
+                          {(assignment.items || []).map((item, index) => (
+                            <fieldset key={item.itemId} className="technician-matrix-item">
+                              <legend className="technician-matrix-item__title"><i>{index + 1}</i><span><strong>{item.titulo}</strong>{item.descripcion ? <small>{item.descripcion}</small> : null}</span>{item.requerido ? <em>Requerido</em> : null}</legend>
+                              <MatrixInput item={item} value={selectedDraft.answers?.[assignment.id]?.[item.itemId]} onChange={(value) => setMatrixValue(assignment.id, item.itemId, value)} disabled={selectedActivity.bloqueada || selectedQueue.some((entry) => entry.status === 'blocked')} />
+                            </fieldset>
+                          ))}
+                        </div>
+                        <footer><button type="button" onClick={() => void saveMatrix(assignment)} disabled={selectedActivity.bloqueada || selectedQueue.some((entry) => entry.status === 'blocked')}>Guardar matriz</button></footer>
+                      </section>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+              </article>
+
+              <article className="technician-panel">
+                <div className="technician-panel__heading"><div><span>Paso 3</span><h3>Fotografías de la actividad</h3></div><small>JPEG, PNG, WebP o GIF · 12 MB</small></div>
+                <label className={`technician-photo-picker ${selectedActivity.bloqueada ? 'is-disabled' : ''}`}><input type="file" accept="image/*" capture="environment" multiple disabled={selectedActivity.bloqueada || selectedQueue.some((entry) => entry.status === 'blocked')} onChange={(event) => { void queuePhotos(event.target.files); event.target.value = ''; }} /><span>＋</span><strong>Tomar o agregar fotografías</strong><small>Se guardan como archivos locales; nunca como texto base64.</small></label>
+                <div className="technician-photo-grid">
+                  {(pendingPhotos[selectedActivity.id] || []).map((photo) => <figure key={photo.mutationId}><Image src={photo.previewUrl} alt={photo.name} width={180} height={120} unoptimized /><figcaption>{photo.name}<span>Pendiente</span></figcaption></figure>)}
+                  {(selectedActivity.adjuntos || []).filter((attachment) => String(attachment.mimeType || '').startsWith('image/')).map((attachment) => <div key={attachment.id} className="technician-photo-record"><span>✓</span><strong>{attachment.nombreOriginal}</strong><small>Sincronizada · {Math.round(Number(attachment.sizeBytes || 0) / 1024)} KB</small></div>)}
+                </div>
+              </article>
+
+              <article className="technician-close-panel">
+                <div><span>Paso 4</span><h3>Cerrar y bloquear actividad</h3><p>Después del cierre sólo un administrador podrá desbloquearla dejando motivo y auditoría.</p></div>
+                <button type="button" onClick={() => void closeActivity()} disabled={selectedActivity.bloqueada || mandatoryMissing > 0 || mandatoryUnsaved > 0 || selectedQueue.some((entry) => entry.status === 'blocked')}>{selectedActivity.estado === 'cerrada' ? 'Actividad cerrada' : mandatoryMissing ? `Faltan ${mandatoryMissing} respuestas` : mandatoryUnsaved ? 'Guarde las matrices' : 'Cerrar actividad'}</button>
+              </article>
+            </>
+          )}
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

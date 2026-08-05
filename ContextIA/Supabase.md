@@ -1,99 +1,89 @@
 # ContextIA - Supabase
 
-## Estado vigente
+Última actualización: 2026-08-04.
 
-Ultima actualizacion: 2026-06-27.
-El runtime de la app opera directo contra Supabase usando `@supabase/supabase-js`. La capa en memoria fue retirada del runtime y `app/lib/demo-store.js` fue eliminado.
+## Objetivo
 
-## Objetivo del modulo
+Supabase/PostgreSQL es la fuente de verdad de identidad, maestros, órdenes de trabajo, actividades, matrices, auditoría, documentos y sincronización. IndexedDB conserva trabajo temporal del técnico, pero nunca reemplaza el estado canónico del servidor.
 
-Mantener Supabase/Postgres como fuente de verdad de maestros, visitas, cotizaciones, auth directa, cola offline, firmas y adjuntos R2.
+## Estado remoto verificado
 
-## Fuentes de verdad y sistemas externos
+- Proyecto: `vgfoubwwxqkrtpymzbat`.
+- El lote productivo de 11 migraciones se aplicó en orden sobre las dos migraciones base existentes.
+- El OpenAPI remoto confirmó 42 tablas públicas después de la aplicación.
+- El hook `Before User Created` está activo y el proveedor Azure está habilitado.
+- La invitación real de Carlos devolvió `200`; Graph aceptó el envío con `202` y `AuthEmailDelivery` quedó `ACCEPTED`, `attempts = 1`, sin error. La cuenta invitada aún no está confirmada.
+- El proyecto reporta `ACTIVE_HEALTHY` y la salud profunda del despliegue productivo confirmó `database: ok`. Continúa en plan Free y no hay backups de plataforma configurados; esa ausencia sigue siendo un riesgo operativo.
 
-- Cliente Supabase server-side:
-  - `app/lib/supabase-server.js`
-- Repositorio de datos runtime:
-  - `app/lib/supabase-store.js`
-- Esquema Prisma de referencia:
-  - `prisma/schema.prisma`
-- Migraciones Supabase:
-  - `supabase/migrations/20260529131254_cmms_mvp.sql`
-  - `supabase/migrations/20260529144500_offline_auth_r2.sql`
+La confirmación OpenAPI prueba presencia del esquema remoto, no por sí sola cada política, trigger, RPC ni recorrido funcional.
 
-## Proyecto activo
+## Modelo canónico
 
-- Proyecto nuevo: `vgfoubwwxqkrtpymzbat`
-- URL productiva: `https://vgfoubwwxqkrtpymzbat.supabase.co`
-- Plan: `Free`
-- La estructura base ya fue aplicada en este proyecto nuevo desde el SQL Editor.
-- Los usuarios de `Usuario` tambien se migraron, preservando `id`, hash y timestamps.
+- `Usuario`: vínculo con `auth.users`, rol y habilitación.
+- `Cliente`, `ClienteContacto`, `ClienteDireccion`, `Equipo`, `EquipoHojaVida`, `Servicio`, `Tecnico` y `Vendedor`: maestros. Un único `Cliente.esEmpresaCMCing = true` representa los equipos propios de CMCing sin dejar `clienteId` nulo.
+- `OrdenTrabajo`, `OrdenTrabajoEquipo` y `OrdenTrabajoActividad`: operación técnica nueva.
+- `MatrizCumplimiento`, `MatrizItem`, `MedicionCatalogo`, `MatrizAlcance`, `ActividadMatrizAsignada` y `ActividadMatrizRespuesta`: cumplimiento versionado.
+- `ActividadAuditoria`: bitácora append-only de la actividad y sus hijos.
+- `ArchivoAdjunto` y `ActividadDocumento`: metadata, snapshots y artefactos; el binario vive privado en R2.
+- `SyncMutationReceipt`, `SyncConflict` y `SyncOutbox`: idempotencia, conflictos y eventos de sincronización.
+- `AuthAccessRule` y `AuthEmailDelivery`: allowlist de identidad y ledger de correo Auth.
 
-## Modelo vigente considerado
+`Visita` y `VisitaActividad` permanecen como modelo histórico. La migración `20260804103000_legacy_visita_to_ot.sql` conserva origen y evidencia mediante relaciones explícitas y `MigracionLegacyVisitaOT`; no deben usarse para crear trabajo técnico nuevo.
 
-- `Usuario`: login directo con password hash y roles.
-- `Cliente`, `Equipo`, `Servicio`, `Tecnico`, `Vendedor`, `Visita`: maestros y operacion.
-- `Equipo.sku`, `serial`, `nombre`: busqueda principal.
-- `EquipoHojaVida`: trazabilidad de vida del equipo.
-- `Cotizacion` y `CotizacionItem`: cotizador simple con PDF/mail.
-- `Actividad` y `VisitaActividad`: actividades por visita.
-- `ArchivoAdjunto`: evidencias, firma y selfie guardadas en R2.
-- `ColaSincronizacion`: idempotencia y trazabilidad de cargas offline.
+## Equipos y criticidad
 
-## Flujo funcional real hoy
+- `Equipo.codigoInterno` se asigna exclusivamente en PostgreSQL mediante secuencia y trigger como `CMC-00001`, `CMC-00002`, etc.; no llega desde la UI y no cambia después del alta.
+- El propietario es obligatorio: un cliente real o el registro técnico `CMCing · Equipo propio`. El trigger rechaza cualquier cambio posterior de `clienteId`.
+- La identificación de catálogo usa `nombre`, `fabricante`, `modelo`, `partNumber`, `serial` opcional y `ean` opcional (8, 13 o 14 dígitos). No existen maestros separados de fabricantes, modelos o Part Number: los valores del propio maestro de equipos son el catálogo de sugerencias.
+- `criticidad` ya no pertenece a `Equipo`. La columna canónica vive en `OrdenTrabajo`; un trigger la mantiene sincronizada con `prioridad` mientras el cliente técnico móvil conserva esa compatibilidad.
+- La migración `20260804114000_equipo_identidad_imagenes_y_criticidad_ot.sql` contiene el renombre de `sku` a `partNumber`, EAN, owner CMCing, código incremental, inmutabilidad y criticidad de OT. Está preparada localmente y debe aplicarse al proyecto remoto antes de usar el flujo publicado.
+- El selector de propietario, tanto en Equipos como en el alta contextual desde una OT, obtiene los clientes desde `Cliente`; si aún falta `esEmpresaCMCing`, conserva esos clientes disponibles y muestra una advertencia visible. La opción especial CMCing y el alta completa requieren la migración, pero un error de catálogo no debe dejar el cuadro combinado vacío en silencio.
 
-- Todas las APIs de negocio importan `app/lib/supabase-store.js`.
-- `supabase-store` conserva la forma de respuesta esperada por la UI y resuelve relaciones en servidor.
-- `listEquipos()` entrega cada equipo con cliente, visitas enriquecidas con servicio/tecnico/cliente, servicios relacionados agrupados y hoja de vida con referencias navegables para la vista 360.
-- `supabase-store` tolera migraciones parciales para QA: tablas opcionales ausentes devuelven arreglos vacios y columnas nuevas faltantes se omiten al escribir.
-- Si RLS bloquea `VisitaEquipo`, la visita queda asociada por la columna legacy `Visita.equipoId`.
-- CRUD de maestros escribe en tablas reales de Supabase.
-- Cotizaciones escriben cabecera en `Cotizacion` e items en `CotizacionItem`.
-- Visitas con multiples equipos escriben `Visita` y sincronizan `VisitaEquipo`.
-- La app tecnica mantiene cola local IndexedDB y al volver conexion llama `/api/tecnico/sync`.
-- `/api/tecnico/sync` crea `ColaSincronizacion`, sube adjuntos privados a R2, crea `ArchivoAdjunto`, actualiza firma del tecnico y marca la visita sincronizada.
-- `/api/r2/private` entrega objetos R2 solo dentro de sesion autenticada cuando la UI necesita renderizar firma/selfie/evidencias en informes.
+## Integridad y auditoría
 
-## Configuracion vigente
+- `rowRevision` entrega concurrencia optimista y aumenta también cuando cambian hijos relevantes.
+- Cerrar una actividad fuerza `cerrada` + `bloqueada`; notas, respuestas, matrices, imágenes y documentos quedan inmutables.
+- El desbloqueo se realiza sólo por RPC administrativo, exige motivo y registra actor, revisiones y origen.
+- `ActividadAuditoria` no permite actualización ni eliminación y sus claves foráneas usan `ON DELETE RESTRICT`.
+- Las matrices publicadas conservan snapshot y hash; su definición deja de ser editable y una nueva revisión se crea como otra versión de la familia.
+- `ActividadDocumento` conserva el snapshot/hash del informe emitido para futura trazabilidad; la generación y persistencia E2E todavía requieren validación.
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` recomendado para APIs server.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` se usa como fallback server-side cuando no existe service role y las politicas/tablas lo permiten.
+## Offline-first y RPC
 
-La URL local quedo apuntando a `https://vgfoubwwxqkrtpymzbat.supabase.co`. En esta etapa el proyecto nuevo ya tiene el esquema y los usuarios base; si se activa RLS, hay que configurar politicas o agregar service role.
+La app técnica usa IndexedDB/Dexie y una outbox local. `/api/tecnico/bootstrap` obtiene sólo la jornada autorizada y `/api/tecnico/sync` aplica mutaciones mediante la sesión Supabase del usuario.
 
-## Decisiones tecnicas vigentes
+RPC de dominio utilizados por el flujo offline:
 
-- El servidor prefiere service role para evitar depender de politicas RLS durante esta etapa productiva inicial.
-- Si no hay service role, usa anon key como fallback para permitir QA con tablas abiertas.
-- Si ambas llaves faltan o parecen placeholder, la app falla con error explicito.
-- La compatibilidad con migraciones parciales es temporal para QA; el objetivo productivo sigue siendo ejecutar todas las migraciones.
-- La migracion a `vgfoubwwxqkrtpymzbat` dejo la estructura lista sin datos de negocio; solo se migraron los usuarios de `Usuario`.
-- Offline se modela con cola local en cliente + `ColaSincronizacion` server-side.
-- El payload offline y `ColaSincronizacion` usan `clientMutationId`; la tabla `Visita` del proyecto actual usa la columna `clienteMutationId`. `supabase-store` acepta ambos nombres y normaliza la respuesta con alias `clientMutationId` para la app tecnica.
-- Adjuntos no se guardan en Postgres: solo metadata, bucket, key y checksum. `publicUrl` queda nulo para adjuntos privados; si se necesita render en UI se usa `/api/r2/private`.
-- Firmas de tecnicos se guardan separadas bajo `private/firmas/tecnicos/{tecnicoId}`; evidencias y selfies quedan bajo `private/servicios/{clientMutationId}`.
-- `sku` no es unico porque puede representar familia/producto; `serial` y `codigoInterno` mantienen unicidad.
-- En free tier conviene asumir menos margen para extras de plataforma y evitar depender de conexiones directas innecesarias.
+- `cmc_actualizar_notas_actividad`
+- `cmc_guardar_respuestas_matriz`
+- `cmc_cerrar_actividad`
+- `cmc_desbloquear_actividad` para el flujo administrativo correspondiente
 
-## Riesgos y bugs conocidos
+Cada mutación usa `clientMutationId`, hash del request y revisión esperada. Reintentar el mismo contenido devuelve el recibo; reutilizar el ID con otro contenido se rechaza. Un conflicto de revisión se persiste en `SyncConflict` junto con payload y snapshot del servidor.
 
-- Las pruebas E2E dependen de que anon tenga permisos o de configurar service role real.
-- La DB activa ya expone `Usuario`, `ArchivoAdjunto`, `ColaSincronizacion` y columnas nuevas de tecnicos para login/offline.
-- QA 2026-05-29 con anon key: permite crear `Cliente`, `Vendedor`, `Tecnico`, `Servicio`, `Equipo` y `Visita`; bloquea por RLS inserts en `Actividad`, `Cotizacion`, `VisitaEquipo` y trigger de `EquipoHojaVida` al completar visitas.
-- QA 2026-05-29 con service role: ya permite crear `Actividad`, `Visita` completada, `VisitaEquipo` y hoja de vida; `CotizacionItem.lineaTotal` se omite en insert porque la DB lo calcula como columna generada.
-- QA 2026-05-29 con service role completo: creo cliente, vendedor, tecnico Cristian Manzor, servicio, actividad, equipo, visita completada y cotizacion `COT-2026-000003`; genero PDFs y envio correos.
-- QA 2026-05-29 offline/R2: creo datos frescos, cotizacion `COT-FIX-20260530000428`, visita `6`, subio 4 adjuntos a R2 (`evidencia_foto`, `evidencia_pdf`, `firma_tecnico`, `selfie_firma`), actualizo firma completa de Cristian Manzor y valido reintento idempotente con respuesta `duplicate`.
-- Decision posterior 2026-05-29: adjuntos, selfies y firmas deben ser privados. El codigo ya no genera URL publica aunque exista `R2_PUBLIC_BASE_URL`; guarda referencias `r2://...` o `r2Key` y renderiza solo via endpoint autenticado.
-- QA privacidad R2 2026-05-29: visita `7` sincronizada con `selfieAdjuntoId`, 4 adjuntos con `publicUrl = null`, prefijos `private/`, endpoint privado `200` con sesion y `401` sin sesion. Se limpiaron 8 `publicUrl` heredadas en `ArchivoAdjunto`.
-- Login real ya funciona despues de ejecutar la migracion auth/offline y configurar `SUPABASE_SERVICE_ROLE_KEY` del proyecto nuevo.
-- Si R2 no esta configurado, la sincronizacion tecnica falla y el item queda en cola local.
-- Si RLS se activa mas adelante, hay que reemplazar service role por politicas por rol o endpoints segmentados.
+## RLS y acceso
 
-## Pendientes reales y proximos pasos
+- Las políticas finales viven en `20260804104000_rls_views_security.sql`.
+- `SUPERADMIN`, `ADMIN`, `OPERACIONES` y `LECTURA` acceden según su función; `LECTURA` no muta.
+- Un `TECNICO` sólo puede leer la OT, cliente, equipo, contactos y actividad relacionados con una asignación propia, y sólo puede mutar por los contratos permitidos.
+- Las vistas sensibles usan semántica `security_invoker` cuando corresponde.
+- Las APIs de usuario deben usar `createSupabaseServerClient`/sesión y RLS. `app/lib/supabase-server.js` exige una llave privada para tareas elevadas y ya no cae a anon como bypass del servidor.
 
-- Ejecutar migraciones en Supabase del proyecto productivo/staging.
-- Mantener al menos un usuario admin activo en `Usuario`.
-- Definir permisos por rol en endpoints CRUD.
-- Definir politicas de retencion de adjuntos R2.
+## Archivos clave
+
+- `app/lib/supabase-auth-server.js`: cliente SSR del usuario.
+- `app/lib/supabase-server.js`: cliente elevado explícito.
+- `app/lib/service-work-store.js`: persistencia de OT, actividades y matrices.
+- `app/api/tecnico/bootstrap/route.js`: snapshot de jornada autorizado.
+- `app/api/tecnico/sync/route.js`: mutaciones offline atómicas.
+- `supabase/migrations/`: fuente canónica del esquema.
+- `prisma/schema.prisma`: referencia secundaria; puede quedar desfasada y requiere introspección antes de usarse como contrato.
+
+## Pendientes reales
+
+- Probar con sesiones reales las políticas de cada rol, incluidos intentos negativos entre técnicos.
+- Validar E2E idempotencia, conflicto, cierre, bloqueo y desbloqueo desde dos clientes.
+- Definir backups/PITR y un procedimiento de recuperación antes de considerar cerrada la continuidad operacional.
+- Completar la aceptación de la invitación y el primer login de Carlos; la aceptación `202` de Graph no acredita confirmación del usuario.
+- Regenerar tipos/introspección si el frontend necesita cobertura completa de las 42 tablas.
+- Aplicar y verificar `20260804114000_equipo_identidad_imagenes_y_criticidad_ot.sql` con una credencial de administración de base de datos o de Supabase Management correspondiente a CMCing; la fuente actual de CMCing no tiene `DIRECT_URL` ni `DATABASE_URL` utilizables.

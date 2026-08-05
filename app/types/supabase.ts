@@ -84,6 +84,8 @@ export type Database = {
         Row: {
           clienteId: number
           createdAt: string
+          descuentoGlobalTipo: string
+          descuentoGlobalValor: number
           descuentoGlobalPct: number
           descuentoMonto: number
           estado: string
@@ -103,6 +105,8 @@ export type Database = {
         Insert: {
           clienteId: number
           createdAt?: string
+          descuentoGlobalTipo?: string
+          descuentoGlobalValor?: number
           descuentoGlobalPct?: number
           descuentoMonto?: number
           estado?: string
@@ -122,6 +126,8 @@ export type Database = {
         Update: {
           clienteId?: number
           createdAt?: string
+          descuentoGlobalTipo?: string
+          descuentoGlobalValor?: number
           descuentoGlobalPct?: number
           descuentoMonto?: number
           estado?: string
@@ -165,42 +171,54 @@ export type Database = {
       CotizacionItem: {
         Row: {
           cantidad: number
+          codigo: string | null
           cotizacionId: number
           createdAt: string
           descripcion: string
+          descuentoTipo: string
+          descuentoValor: number
           descuentoPct: number
           equipoId: number | null
           id: number
           lineaTotal: number | null
           orden: number
+          nombre: string
           precioUnitario: number
           servicioId: number | null
           updatedAt: string
         }
         Insert: {
           cantidad?: number
+          codigo?: string | null
           cotizacionId: number
           createdAt?: string
           descripcion: string
+          descuentoTipo?: string
+          descuentoValor?: number
           descuentoPct?: number
           equipoId?: number | null
           id?: number
           lineaTotal?: number | null
           orden?: number
+          nombre: string
           precioUnitario?: number
           servicioId?: number | null
           updatedAt?: string
         }
         Update: {
           cantidad?: number
+          codigo?: string | null
           cotizacionId?: number
           createdAt?: string
           descripcion?: string
+          descuentoTipo?: string
+          descuentoValor?: number
           descuentoPct?: number
           equipoId?: number | null
           id?: number
           lineaTotal?: number | null
           orden?: number
+          nombre?: string
           precioUnitario?: number
           servicioId?: number | null
           updatedAt?: string
@@ -236,6 +254,72 @@ export type Database = {
           },
           {
             foreignKeyName: "CotizacionItem_servicioId_fkey"
+            columns: ["servicioId"]
+            isOneToOne: false
+            referencedRelation: "Servicio"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      CotizacionItemServicio: {
+        Row: {
+          cantidad: number
+          cotizacionItemId: number
+          createdAt: string
+          descripcionDetalle: string | null
+          descuentoPct: number
+          descuentoTipo: string
+          descuentoValor: number
+          id: number
+          lineaTotal: number
+          nombre: string
+          orden: number
+          precioUnitario: number
+          servicioId: number
+          updatedAt: string
+        }
+        Insert: {
+          cantidad?: number
+          cotizacionItemId: number
+          createdAt?: string
+          descripcionDetalle?: string | null
+          descuentoPct?: number
+          descuentoTipo?: string
+          descuentoValor?: number
+          id?: number
+          lineaTotal?: number
+          nombre: string
+          orden?: number
+          precioUnitario?: number
+          servicioId: number
+          updatedAt?: string
+        }
+        Update: {
+          cantidad?: number
+          cotizacionItemId?: number
+          createdAt?: string
+          descripcionDetalle?: string | null
+          descuentoPct?: number
+          descuentoTipo?: string
+          descuentoValor?: number
+          id?: number
+          lineaTotal?: number
+          nombre?: string
+          orden?: number
+          precioUnitario?: number
+          servicioId?: number
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "CotizacionItemServicio_cotizacionItemId_fkey"
+            columns: ["cotizacionItemId"]
+            isOneToOne: false
+            referencedRelation: "CotizacionItem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CotizacionItemServicio_servicioId_fkey"
             columns: ["servicioId"]
             isOneToOne: false
             referencedRelation: "Servicio"

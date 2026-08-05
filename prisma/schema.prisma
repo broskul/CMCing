@@ -22,49 +22,59 @@ enum EstadoSync {
 }
 
 model Cliente {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  email     String   @unique
-  telefono  String?
-  direccion String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  rut             String?  @unique
+  email           String   @unique
+  telefono        String?
+  direccion       String?
+  esEmpresaCMCing Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  cotizaciones Cotizacion[]
-  equipos      Equipo[]
-  visitas      Visita[]
+  cotizaciones   Cotizacion[]
+  equipos        Equipo[]
+  visitas        Visita[]
+  ordenesTrabajo OrdenTrabajo[]
 }
 
 model Equipo {
-  id                Int       @id @default(autoincrement())
-  sku               String?
-  nombre            String
-  modelo            String
-  serial            String    @unique
-  codigoInterno     String?   @unique
-  categoria         String?
-  fabricante        String?
-  ubicacion         String?
-  imagenUrl         String?
-  fechaInstalacion  DateTime?
-  fechaGarantiaFin  DateTime?
-  estadoOperativo   String    @default("operativo")
-  criticidad        String    @default("media")
-  ultimaMantencion  DateTime?
-  proximaMantencion DateTime?
-  observaciones     String?
-  clienteId         Int
-  cliente           Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  partNumber          String?
+  ean                 String?   @unique
+  nombre              String
+  modelo              String?
+  serial              String?   @unique
+  codigoInterno       String?   @unique
+  categoria           String?
+  fabricante          String?
+  ubicacion           String?
+  imagenUrl           String?
+  imagenR2Bucket      String?
+  imagenR2Key         String?   @unique
+  imagenMimeType      String?
+  imagenSizeBytes     Int?
+  imagenChecksumSha256 String?
+  fechaInstalacion    DateTime?
+  fechaGarantiaFin    DateTime?
+  estadoOperativo     String    @default("operativo")
+  ultimaMantencion    DateTime?
+  proximaMantencion   DateTime?
+  observaciones       String?
+  clienteId           Int
+  cliente             Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   cotizacionItems CotizacionItem[]
   hojaVida        EquipoHojaVida[]
   visitaEquipos   VisitaEquipo[]
   visitas         Visita[]
+  ordenesTrabajo  OrdenTrabajo[]
 
   @@index([nombre])
-  @@index([sku])
+  @@index([partNumber])
+  @@index([ean])
   @@index([serial])
   @@index([estadoOperativo])
 }
@@ -79,8 +89,9 @@ model Servicio {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  cotizacionItems CotizacionItem[]
-  visitas         Visita[]
+  cotizacionItems          CotizacionItem[]
+  cotizacionItemServicios  CotizacionItemServicio[]
+  visitas                  Visita[]
 }
 
 model Vendedor {
@@ -96,24 +107,25 @@ model Vendedor {
 }
 
 model Tecnico {
-  id              Int       @id @default(autoincrement())
-  nombre          String
-  especialidad    String?
-  email           String    @unique
-  telefono        String?
-  firmaTexto      String?
-  firmaImagenUrl  String?
+  id               Int       @id @default(autoincrement())
+  nombre           String
+  especialidad     String?
+  email            String    @unique
+  telefono         String?
+  firmaTexto       String?
+  firmaImagenUrl   String?
   firmaImagenR2Key String?
-  firmaUpdatedAt  DateTime?
-  activo          Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  firmaUpdatedAt   DateTime?
+  activo           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  adjuntos   ArchivoAdjunto[]
-  hojaVida   EquipoHojaVida[]
-  syncJobs   ColaSincronizacion[]
-  usuario    Usuario?
-  visitas    Visita[]
+  adjuntos                ArchivoAdjunto[]
+  hojaVida                EquipoHojaVida[]
+  syncJobs                ColaSincronizacion[]
+  usuario                 Usuario?
+  visitas                 Visita[]
+  ordenTrabajoActividades OrdenTrabajoActividad[]
 }
 
 model Usuario {
@@ -129,44 +141,50 @@ model Usuario {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  syncJobs ColaSincronizacion[]
+  syncJobs                ColaSincronizacion[]
+  ordenesTrabajoCreadas   OrdenTrabajo[]             @relation("OrdenTrabajoCreador")
+  actividadesCreadas      OrdenTrabajoActividad[]    @relation("ActividadCreador")
+  actividadesActualizadas OrdenTrabajoActividad[]    @relation("ActividadActualizador")
+  auditoriasActividad     ActividadAuditoria[]
+  matricesCreadas         MatrizCumplimiento[]
+  respuestasMatriz        ActividadMatrizRespuesta[]
 }
 
 model Visita {
-  id                  Int       @id @default(autoincrement())
-  codigo              String?   @unique
-  clienteId           Int
-  cliente             Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  equipoId            Int?
-  equipo              Equipo?   @relation(fields: [equipoId], references: [id], onDelete: SetNull)
-  tecnicoId           Int
-  tecnico             Tecnico   @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
-  vendedorId          Int?
-  vendedor            Vendedor? @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
-  servicioId          Int
-  servicio            Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
-  fecha               DateTime
-  fechaProgramada     DateTime?
-  fechaFinProgramada  DateTime?
-  fechaInicio         DateTime?
-  fechaCierre         DateTime?
-  descripcion         String?
-  notasTecnicas       String?
-  estado              String    @default("pendiente")
-  prioridad           String    @default("media")
-  tipoVisita          String    @default("mantenimiento_preventivo")
-  duracionMin         Int?
-  costoManoObra       Decimal   @default(0) @db.Decimal(14, 2)
-  costoRepuestos      Decimal   @default(0) @db.Decimal(14, 2)
-  calendarEventId     String?
-  clienteMutationId   String?   @unique
-  offlineEstado       EstadoSync @default(SINCRONIZADO)
-  signedAt            DateTime?
-  firmaTecnicoTexto   String?
+  id                    Int        @id @default(autoincrement())
+  codigo                String?    @unique
+  clienteId             Int
+  cliente               Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  equipoId              Int?
+  equipo                Equipo?    @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  tecnicoId             Int
+  tecnico               Tecnico    @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  vendedorId            Int?
+  vendedor              Vendedor?  @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  servicioId            Int
+  servicio              Servicio   @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  fecha                 DateTime
+  fechaProgramada       DateTime?
+  fechaFinProgramada    DateTime?
+  fechaInicio           DateTime?
+  fechaCierre           DateTime?
+  descripcion           String?
+  notasTecnicas         String?
+  estado                String     @default("pendiente")
+  prioridad             String     @default("media")
+  tipoVisita            String     @default("mantenimiento_preventivo")
+  duracionMin           Int?
+  costoManoObra         Decimal    @default(0) @db.Decimal(14, 2)
+  costoRepuestos        Decimal    @default(0) @db.Decimal(14, 2)
+  calendarEventId       String?
+  clienteMutationId     String?    @unique
+  offlineEstado         EstadoSync @default(SINCRONIZADO)
+  signedAt              DateTime?
+  firmaTecnicoTexto     String?
   firmaTecnicoImagenUrl String?
-  selfieAdjuntoId     Int?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  selfieAdjuntoId       Int?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
   actividades   VisitaActividad[]
   adjuntos      ArchivoAdjunto[]
@@ -204,26 +222,28 @@ model Actividad {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  visitas VisitaActividad[]
+  visitas                 VisitaActividad[]
+  ordenTrabajoActividades OrdenTrabajoActividad[]
+  matricesDefault         ActividadMatrizDefault[]
 }
 
 model VisitaActividad {
-  id                   Int       @id @default(autoincrement())
+  id                   Int        @id @default(autoincrement())
   visitaId             Int
-  visita               Visita    @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  visita               Visita     @relation(fields: [visitaId], references: [id], onDelete: Cascade)
   actividadId          Int?
   actividad            Actividad? @relation(fields: [actividadId], references: [id], onDelete: SetNull)
   titulo               String
   descripcion          String?
-  estado               String    @default("pendiente")
-  orden                Int       @default(1)
+  estado               String     @default("pendiente")
+  orden                Int        @default(1)
   responsableTecnicoId Int?
   fechaProgramada      DateTime?
   fechaReal            DateTime?
   duracionMin          Int?
   observaciones        String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
   adjuntos ArchivoAdjunto[]
 
@@ -233,51 +253,236 @@ model VisitaActividad {
 }
 
 model EquipoHojaVida {
-  id          Int      @id @default(autoincrement())
-  equipoId    Int
-  equipo      Equipo   @relation(fields: [equipoId], references: [id], onDelete: Cascade)
-  visitaId    Int?
-  visita      Visita?  @relation(fields: [visitaId], references: [id], onDelete: SetNull)
-  tecnicoId   Int?
-  tecnico     Tecnico? @relation(fields: [tecnicoId], references: [id], onDelete: SetNull)
-  tipoEvento  String   @default("servicio")
-  fechaEvento DateTime @default(now())
-  titulo      String
-  detalle     String?
-  costo       Decimal? @db.Decimal(14, 2)
+  id           Int      @id @default(autoincrement())
+  equipoId     Int
+  equipo       Equipo   @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  visitaId     Int?
+  visita       Visita?  @relation(fields: [visitaId], references: [id], onDelete: SetNull)
+  tecnicoId    Int?
+  tecnico      Tecnico? @relation(fields: [tecnicoId], references: [id], onDelete: SetNull)
+  tipoEvento   String   @default("servicio")
+  fechaEvento  DateTime @default(now())
+  titulo       String
+  detalle      String?
+  costo        Decimal? @db.Decimal(14, 2)
   documentoUrl String?
-  metadata    Json     @default("{}")
-  createdAt   DateTime @default(now())
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
 
   @@index([equipoId, fechaEvento])
   @@index([tipoEvento])
 }
 
 model ArchivoAdjunto {
-  id                 Int       @id @default(autoincrement())
-  visitaId           Int?
-  visita             Visita?   @relation(fields: [visitaId], references: [id], onDelete: Cascade)
-  visitaActividadId  Int?
-  visitaActividad    VisitaActividad? @relation(fields: [visitaActividadId], references: [id], onDelete: Cascade)
-  tecnicoId          Int?
-  tecnico            Tecnico?  @relation(fields: [tecnicoId], references: [id], onDelete: SetNull)
-  syncJobId          Int?
-  syncJob            ColaSincronizacion? @relation(fields: [syncJobId], references: [id], onDelete: SetNull)
-  tipo               String    @default("evidencia")
-  nombreOriginal     String
-  mimeType           String
-  sizeBytes          Int?
-  r2Bucket           String
-  r2Key              String
-  publicUrl          String?
-  checksumSha256     String?
-  metadata           Json      @default("{}")
-  createdAt          DateTime  @default(now())
+  id                      Int                    @id @default(autoincrement())
+  visitaId                Int?
+  visita                  Visita?                @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  visitaActividadId       Int?
+  visitaActividad         VisitaActividad?       @relation(fields: [visitaActividadId], references: [id], onDelete: Cascade)
+  ordenTrabajoActividadId Int?
+  ordenTrabajoActividad   OrdenTrabajoActividad? @relation(fields: [ordenTrabajoActividadId], references: [id], onDelete: Cascade)
+  tecnicoId               Int?
+  tecnico                 Tecnico?               @relation(fields: [tecnicoId], references: [id], onDelete: SetNull)
+  syncJobId               Int?
+  syncJob                 ColaSincronizacion?    @relation(fields: [syncJobId], references: [id], onDelete: SetNull)
+  tipo                    String                 @default("evidencia")
+  nombreOriginal          String
+  mimeType                String
+  sizeBytes               Int?
+  r2Bucket                String
+  r2Key                   String
+  publicUrl               String?
+  checksumSha256          String?
+  metadata                Json                   @default("{}")
+  createdAt               DateTime               @default(now())
 
   @@index([visitaId])
   @@index([visitaActividadId])
+  @@index([ordenTrabajoActividadId])
   @@index([tecnicoId])
   @@index([syncJobId])
+}
+
+model OrdenTrabajo {
+  id                 Int       @id @default(autoincrement())
+  codigo             String?   @unique
+  titulo             String
+  descripcion        String?
+  clienteId          Int
+  cliente            Cliente   @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  equipoId           Int?
+  equipo             Equipo?   @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  prioridad          String    @default("media")
+  criticidad         String    @default("media")
+  estado             String    @default("abierta")
+  fechaApertura      DateTime  @default(now())
+  fechaProgramada    DateTime?
+  fechaCierre        DateTime?
+  createdByUsuarioId Int?
+  createdByUsuario   Usuario?  @relation("OrdenTrabajoCreador", fields: [createdByUsuarioId], references: [id], onDelete: SetNull)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  actividades OrdenTrabajoActividad[]
+
+  @@index([clienteId])
+  @@index([equipoId])
+  @@index([estado])
+  @@index([fechaProgramada])
+}
+
+model OrdenTrabajoActividad {
+  id                 Int          @id @default(autoincrement())
+  ordenTrabajoId     Int
+  ordenTrabajo       OrdenTrabajo @relation(fields: [ordenTrabajoId], references: [id], onDelete: Cascade)
+  actividadId        Int?
+  actividad          Actividad?   @relation(fields: [actividadId], references: [id], onDelete: SetNull)
+  tecnicoId          Int
+  tecnico            Tecnico      @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
+  titulo             String
+  descripcionBreve   String?
+  notasTecnico       String?
+  estado             String       @default("abierta")
+  fechaProgramada    DateTime?
+  fechaInicio        DateTime?
+  fechaCierre        DateTime?
+  bloqueada          Boolean      @default(false)
+  bloqueadaAt        DateTime?
+  desbloqueadaAt     DateTime?
+  motivoDesbloqueo   String?
+  createdByUsuarioId Int?
+  createdByUsuario   Usuario?     @relation("ActividadCreador", fields: [createdByUsuarioId], references: [id], onDelete: SetNull)
+  updatedByUsuarioId Int?
+  updatedByUsuario   Usuario?     @relation("ActividadActualizador", fields: [updatedByUsuarioId], references: [id], onDelete: SetNull)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  auditoria ActividadAuditoria[]
+  matrices  ActividadMatrizAsignada[]
+  adjuntos  ArchivoAdjunto[]
+
+  @@index([ordenTrabajoId])
+  @@index([tecnicoId])
+  @@index([estado])
+  @@index([fechaProgramada])
+}
+
+model ActividadAuditoria {
+  id                      BigInt                @id @default(autoincrement())
+  ordenTrabajoActividadId Int
+  ordenTrabajoActividad   OrdenTrabajoActividad @relation(fields: [ordenTrabajoActividadId], references: [id], onDelete: Cascade)
+  accion                  String
+  actorUsuarioId          Int?
+  actorUsuario            Usuario?              @relation(fields: [actorUsuarioId], references: [id], onDelete: SetNull)
+  motivo                  String?
+  datosAntes              Json?
+  datosDespues            Json?
+  createdAt               DateTime              @default(now())
+
+  @@index([ordenTrabajoActividadId, createdAt])
+}
+
+model MedicionCatalogo {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  unidad      String?
+  simbolo     String?
+  descripcion String?
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items MatrizItem[]
+}
+
+model MatrizCumplimiento {
+  id                 Int      @id @default(autoincrement())
+  nombre             String
+  descripcion        String?
+  categoria          String
+  version            Int      @default(1)
+  activa             Boolean  @default(true)
+  createdByUsuarioId Int?
+  createdByUsuario   Usuario? @relation(fields: [createdByUsuarioId], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  items              MatrizItem[]
+  actividadesDefault ActividadMatrizDefault[]
+  asignaciones       ActividadMatrizAsignada[]
+
+  @@index([categoria])
+}
+
+model MatrizItem {
+  id            Int                @id @default(autoincrement())
+  matrizId      Int
+  matriz        MatrizCumplimiento @relation(fields: [matrizId], references: [id], onDelete: Cascade)
+  titulo        String
+  descripcion   String?
+  tipoRespuesta String
+  medicionId    Int?
+  medicion      MedicionCatalogo?  @relation(fields: [medicionId], references: [id], onDelete: SetNull)
+  opciones      Json               @default("[]")
+  requerido     Boolean            @default(true)
+  orden         Int                @default(1)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  respuestas ActividadMatrizRespuesta[]
+
+  @@unique([matrizId, orden])
+  @@index([matrizId])
+}
+
+model ActividadMatrizDefault {
+  id          Int                @id @default(autoincrement())
+  actividadId Int
+  actividad   Actividad          @relation(fields: [actividadId], references: [id], onDelete: Cascade)
+  matrizId    Int
+  matriz      MatrizCumplimiento @relation(fields: [matrizId], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now())
+
+  @@unique([actividadId, matrizId])
+}
+
+model ActividadMatrizAsignada {
+  id                      Int                   @id @default(autoincrement())
+  ordenTrabajoActividadId Int
+  ordenTrabajoActividad   OrdenTrabajoActividad @relation(fields: [ordenTrabajoActividadId], references: [id], onDelete: Cascade)
+  matrizId                Int
+  matriz                  MatrizCumplimiento    @relation(fields: [matrizId], references: [id], onDelete: Restrict)
+  origen                  String                @default("manual")
+  obligatoria             Boolean               @default(true)
+  estado                  String                @default("pendiente")
+  completedAt             DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  respuestas ActividadMatrizRespuesta[]
+
+  @@unique([ordenTrabajoActividadId, matrizId])
+  @@index([ordenTrabajoActividadId])
+}
+
+model ActividadMatrizRespuesta {
+  id                        BigInt                  @id @default(autoincrement())
+  actividadMatrizAsignadaId Int
+  actividadMatrizAsignada   ActividadMatrizAsignada @relation(fields: [actividadMatrizAsignadaId], references: [id], onDelete: Cascade)
+  matrizItemId              Int
+  matrizItem                MatrizItem              @relation(fields: [matrizItemId], references: [id], onDelete: Cascade)
+  valorNumero               Decimal?
+  valorBooleano             Boolean?
+  valorTexto                String?
+  valorOpciones             Json?
+  respondidoByUsuarioId     Int?
+  respondidoByUsuario       Usuario?                @relation(fields: [respondidoByUsuarioId], references: [id], onDelete: SetNull)
+  respondidoAt              DateTime                @default(now())
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  @@unique([actividadMatrizAsignadaId, matrizItemId])
+  @@index([actividadMatrizAsignadaId])
 }
 
 model ColaSincronizacion {
@@ -318,6 +523,8 @@ model Cotizacion {
   validaHasta        DateTime?
   estado             String    @default("borrador")
   moneda             String    @default("CLP")
+  descuentoGlobalTipo  String    @default("porcentaje")
+  descuentoGlobalValor Decimal   @default(0) @db.Decimal(14, 2)
   descuentoGlobalPct Decimal   @default(0) @db.Decimal(5, 2)
   impuestoPct        Decimal   @default(19) @db.Decimal(5, 2)
   subtotal           Decimal   @default(0) @db.Decimal(14, 2)
@@ -335,21 +542,50 @@ model Cotizacion {
 }
 
 model CotizacionItem {
-  id             Int       @id @default(autoincrement())
+  id             Int        @id @default(autoincrement())
   cotizacionId   Int
   cotizacion     Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
   servicioId     Int?
-  servicio       Servicio? @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  servicio       Servicio?  @relation(fields: [servicioId], references: [id], onDelete: SetNull)
   equipoId       Int?
-  equipo         Equipo?   @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  equipo         Equipo?    @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  nombre         String
+  codigo         String?
   descripcion    String
-  cantidad       Decimal   @default(1) @db.Decimal(12, 2)
-  precioUnitario Decimal   @default(0) @db.Decimal(14, 2)
-  descuentoPct   Decimal   @default(0) @db.Decimal(5, 2)
-  lineaTotal     Decimal   @default(0) @db.Decimal(14, 2)
-  orden          Int       @default(1)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  cantidad       Decimal    @default(1) @db.Decimal(12, 2)
+  precioUnitario Decimal    @default(0) @db.Decimal(14, 2)
+  descuentoTipo  String     @default("porcentaje")
+  descuentoValor Decimal    @default(0) @db.Decimal(14, 2)
+  descuentoPct   Decimal    @default(0) @db.Decimal(5, 2)
+  lineaTotal     Decimal    @default(0) @db.Decimal(14, 2)
+  orden          Int        @default(1)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  servicios      CotizacionItemServicio[]
 
   @@index([cotizacionId])
+}
+
+model CotizacionItemServicio {
+  id                 Int             @id @default(autoincrement())
+  cotizacionItemId   Int
+  cotizacionItem     CotizacionItem  @relation(fields: [cotizacionItemId], references: [id], onDelete: Cascade)
+  servicioId         Int
+  servicio           Servicio        @relation(fields: [servicioId], references: [id], onDelete: Restrict)
+  nombre             String
+  descripcionDetalle String?
+  cantidad           Decimal         @default(1) @db.Decimal(12, 2)
+  precioUnitario     Decimal         @default(0) @db.Decimal(14, 2)
+  descuentoTipo      String          @default("porcentaje")
+  descuentoValor     Decimal         @default(0) @db.Decimal(14, 2)
+  descuentoPct       Decimal         @default(0) @db.Decimal(5, 2)
+  lineaTotal         Decimal         @default(0) @db.Decimal(14, 2)
+  orden              Int             @default(1)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([cotizacionItemId, orden])
+  @@index([cotizacionItemId])
+  @@index([servicioId])
 }

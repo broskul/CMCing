@@ -3,34 +3,21 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { EquipmentFormModal } from '../components/EquipmentFormModal';
 
 const EMPTY_EQUIPO_FORM = {
-  sku: '',
-  codigoInterno: '',
   nombre: '',
   modelo: '',
   serial: '',
+  partNumber: '',
+  ean: '',
   fabricante: '',
   ubicacion: '',
   estadoOperativo: 'operativo',
-  criticidad: 'media',
   clienteId: '',
-  imagenUrl: '',
+  propietarioTipo: '',
   observaciones: '',
 };
-
-const ESTADO_OPTIONS = [
-  { value: 'operativo', label: 'Operativo' },
-  { value: 'mantenimiento', label: 'Mantenimiento' },
-  { value: 'fuera_servicio', label: 'Fuera de servicio' },
-];
-
-const CRITICIDAD_OPTIONS = [
-  { value: 'baja', label: 'Baja' },
-  { value: 'media', label: 'Media' },
-  { value: 'alta', label: 'Alta' },
-  { value: 'critica', label: 'Crítica' },
-];
 
 const statusTone = {
   operativo: 'is-good',
@@ -41,13 +28,6 @@ const statusTone = {
   revision: 'is-warning',
   fuera_servicio: 'is-danger',
   inactivo: 'is-danger',
-};
-
-const criticidadTone = {
-  baja: 'is-good',
-  media: 'is-warning',
-  alta: 'is-danger',
-  critica: 'is-danger',
 };
 
 function compactText(value, fallback = '-') {
@@ -88,7 +68,7 @@ function formatMoney(value) {
 }
 
 function getEquipoCode(equipo) {
-  return equipo?.sku || equipo?.codigoInterno || (equipo?.id ? `EQ-${equipo.id}` : 'Equipo');
+  return equipo?.codigoInterno || equipo?.partNumber || (equipo?.id ? `EQ-${equipo.id}` : 'Equipo');
 }
 
 function getInitials(value) {
@@ -114,6 +94,15 @@ function uniqueById(items) {
     seen.add(item.id);
     return true;
   });
+}
+
+function clientOwnerOptions(clientes) {
+  return (clientes || []).map((cliente) => ({
+    id: String(cliente.id),
+    nombre: cliente.nombre,
+    detalle: cliente.rut || 'Cliente',
+    propietarioTipo: 'CLIENTE',
+  }));
 }
 
 function buildRelatedServices(visitas = []) {
@@ -169,7 +158,9 @@ function EntityLink({ children, onClick }) {
 
 function EquipoImage({ equipo, large = false }) {
   const [hasError, setHasError] = useState(false);
-  const src = getImageSrc(equipo?.imagenUrl);
+  const src = equipo?.imagenR2Key
+    ? `/api/r2/private?key=${encodeURIComponent(equipo.imagenR2Key)}`
+    : getImageSrc(equipo?.imagenUrl);
 
   return (
     <div className={large ? 'asset-photo is-large' : 'asset-photo'}>
@@ -341,107 +332,10 @@ function RelationModal({ relation, data, onClose, onOpen }) {
   );
 }
 
-function EquipoFormModal({ open, mode, formData, clientes, onChange, onClose, onSubmit }) {
-  if (!open) return null;
-
-  return (
-    <div className="entity-modal-backdrop">
-      <div className="entity-modal is-form">
-        <div className="entity-modal-header">
-          <div>
-            <p>equipo</p>
-            <h3>{mode === 'edit' ? 'Editar equipo' : 'Nuevo equipo'}</h3>
-          </div>
-          <button type="button" onClick={onClose}>Cerrar</button>
-        </div>
-
-        <form className="entity-form" onSubmit={onSubmit}>
-          <label>
-            Cliente
-            <select name="clienteId" value={formData.clienteId || ''} onChange={onChange}>
-              <option value="">Sin cliente</option>
-              {clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Nombre
-            <input name="nombre" value={formData.nombre || ''} onChange={onChange} required />
-          </label>
-
-          <label>
-            SKU
-            <input name="sku" value={formData.sku || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Código interno
-            <input name="codigoInterno" value={formData.codigoInterno || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Modelo
-            <input name="modelo" value={formData.modelo || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Serial
-            <input name="serial" value={formData.serial || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Fabricante
-            <input name="fabricante" value={formData.fabricante || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Ubicación
-            <input name="ubicacion" value={formData.ubicacion || ''} onChange={onChange} />
-          </label>
-
-          <label>
-            Estado
-            <select name="estadoOperativo" value={formData.estadoOperativo || ''} onChange={onChange}>
-              {ESTADO_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Criticidad
-            <select name="criticidad" value={formData.criticidad || ''} onChange={onChange}>
-              {CRITICIDAD_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="entity-form-wide">
-            Imagen URL
-            <input name="imagenUrl" value={formData.imagenUrl || ''} onChange={onChange} />
-          </label>
-
-          <label className="entity-form-wide">
-            Observaciones
-            <textarea name="observaciones" value={formData.observaciones || ''} onChange={onChange} />
-          </label>
-
-          <div className="entity-form-actions">
-            <button type="submit" className="primary-action">Guardar</button>
-            <button type="button" className="secondary-action" onClick={onClose}>Cancelar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default function EquiposPage() {
   const [equipos, setEquipos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [propietarios, setPropietarios] = useState([]);
   const [servicios, setServicios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [visitas, setVisitas] = useState([]);
@@ -452,29 +346,37 @@ export default function EquiposPage() {
   const [formMode, setFormMode] = useState('create');
   const [formData, setFormData] = useState(EMPTY_EQUIPO_FORM);
   const [relation, setRelation] = useState(null);
+  const [ownerCatalogNotice, setOwnerCatalogNotice] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [equiposRes, clientesRes, serviciosRes, tecnicosRes, visitasRes] = await Promise.all([
+      const [equiposRes, clientesRes, serviciosRes, tecnicosRes, visitasRes, ownerCatalogRes] = await Promise.all([
         fetch('/api/equipos'),
         fetch('/api/clientes'),
         fetch('/api/servicios'),
         fetch('/api/tecnicos'),
         fetch('/api/visitas'),
+        fetch('/api/equipos/catalogos'),
       ]);
 
-      const [equiposList, clientesList, serviciosList, tecnicosList, visitasList] = await Promise.all([
+      const [equiposList, clientesList, serviciosList, tecnicosList, visitasList, ownerCatalog] = await Promise.all([
         equiposRes.json(),
         clientesRes.json(),
         serviciosRes.json(),
         tecnicosRes.json(),
         visitasRes.json(),
+        ownerCatalogRes.json(),
       ]);
 
       const safeEquipos = Array.isArray(equiposList) ? equiposList : [];
+      const safeClientes = Array.isArray(clientesList) ? clientesList : [];
+      const catalogOwners = Array.isArray(ownerCatalog?.propietarios) ? ownerCatalog.propietarios : [];
+      const canUseOwnerCatalog = ownerCatalogRes.ok && catalogOwners.length > 0;
       setEquipos(safeEquipos);
-      setClientes(Array.isArray(clientesList) ? clientesList : []);
+      setClientes(safeClientes);
+      setPropietarios(canUseOwnerCatalog ? catalogOwners : clientOwnerOptions(safeClientes));
+      setOwnerCatalogNotice(canUseOwnerCatalog ? '' : (ownerCatalog?.error || 'El catálogo de propietarios no respondió. Se cargaron los clientes disponibles.'));
       setServicios(Array.isArray(serviciosList) ? serviciosList : []);
       setTecnicos(Array.isArray(tecnicosList) ? tecnicosList : []);
       setVisitas(Array.isArray(visitasList) ? visitasList : []);
@@ -496,8 +398,9 @@ export default function EquiposPage() {
     if (!needle) return equipos;
 
     return equipos.filter((equipo) => [
-      equipo.sku,
       equipo.codigoInterno,
+      equipo.partNumber,
+      equipo.ean,
       equipo.serial,
       equipo.nombre,
       equipo.modelo,
@@ -523,6 +426,7 @@ export default function EquiposPage() {
       ...EMPTY_EQUIPO_FORM,
       ...equipo,
       clienteId: equipo.clienteId ? String(equipo.clienteId) : '',
+      propietarioTipo: equipo.cliente?.esEmpresaCMCing ? 'CMCING' : 'CLIENTE',
     });
     setFormMode('edit');
     setFormOpen(true);
@@ -533,14 +437,18 @@ export default function EquiposPage() {
     setFormData((current) => ({ ...current, [name]: value }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
+  const handleSubmit = async ({ imageFile, imageUrl }) => {
     const payload = {
       ...EMPTY_EQUIPO_FORM,
       ...formData,
       clienteId: formData.clienteId ? Number(formData.clienteId) : null,
     };
+
+    delete payload.propietarioBloqueado;
+    if (formMode === 'edit') {
+      delete payload.propietarioTipo;
+      delete payload.clienteId;
+    }
 
     try {
       const res = await fetch(formMode === 'edit' ? `/api/equipos/${formData.id}` : '/api/equipos', {
@@ -554,12 +462,25 @@ export default function EquiposPage() {
         throw new Error(error.error || 'No se pudo guardar el equipo.');
       }
 
-      const saved = await res.json();
+      let saved = await res.json();
+      let imageWarning = '';
+      if (imageFile || imageUrl) {
+        const imageData = new FormData();
+        if (imageFile) imageData.set('imageFile', imageFile);
+        if (imageUrl) imageData.set('imageUrl', imageUrl);
+        const imageRes = await fetch(`/api/equipos/${saved.id}/imagen`, { method: 'POST', body: imageData });
+        if (imageRes.ok) saved = await imageRes.json();
+        else {
+          const imageError = await imageRes.json().catch(() => ({}));
+          imageWarning = imageError.error || 'El equipo fue guardado, pero no se pudo cargar la imagen.';
+        }
+      }
       setFormOpen(false);
       setSelectedId(saved.id);
       await loadData();
+      if (imageWarning) alert(imageWarning);
     } catch (error) {
-      alert(error.message);
+      throw error;
     }
   };
 
@@ -602,6 +523,8 @@ export default function EquiposPage() {
           </div>
         </header>
 
+        {ownerCatalogNotice ? <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[0.82rem] text-amber-900">{ownerCatalogNotice}</p> : null}
+
         <section className="asset-layout">
           <aside className="asset-list-panel panel">
             <label className="asset-search">
@@ -609,7 +532,7 @@ export default function EquiposPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="SKU, serial, cliente"
+                placeholder="Código, EAN, Part Number, serial o cliente"
               />
             </label>
 
@@ -650,11 +573,12 @@ export default function EquiposPage() {
 
                   <div className="entity-badge-row">
                     <EntityBadge value={selected.estadoOperativo || 'Sin estado'} tone={statusTone[normalizeKey(selected.estadoOperativo)] || ''} />
-                    <EntityBadge value={selected.criticidad || 'Sin criticidad'} tone={criticidadTone[normalizeKey(selected.criticidad)] || ''} />
                   </div>
 
                   <dl className="asset-facts">
                     <Fact label="Cliente" value={selected.cliente?.nombre} />
+                    <Fact label="Part Number" value={selected.partNumber} />
+                    <Fact label="EAN" value={selected.ean} />
                     <Fact label="Serial" value={selected.serial} />
                     <Fact label="Modelo" value={selected.modelo} />
                     <Fact label="Fabricante" value={selected.fabricante} />
@@ -740,12 +664,18 @@ export default function EquiposPage() {
         </section>
       </div>
 
-      <EquipoFormModal
+      <EquipmentFormModal
         open={formOpen}
         mode={formMode}
         formData={formData}
-        clientes={clientes}
+        equipos={equipos}
+        propietarios={propietarios}
         onChange={handleFormChange}
+        onOwnerChange={(id, option) => setFormData((current) => ({
+          ...current,
+          propietarioTipo: option?.propietarioTipo || (id === 'CMCING' ? 'CMCING' : 'CLIENTE'),
+          clienteId: id === 'CMCING' ? '' : String(id || ''),
+        }))}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
       />

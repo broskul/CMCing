@@ -1,78 +1,108 @@
-import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 process.loadEnvFile?.('.env.local');
 
+const ALLOWED_ROLES = new Set(['SUPERADMIN', 'ADMIN', 'OPERACIONES', 'TECNICO', 'LECTURA']);
+const EXTERNAL_BOOTSTRAP_EMAIL = 'carlos@prof3sional.com';
+
 function readArg(name) {
   const index = process.argv.indexOf(`--${name}`);
-  if (index === -1) return '';
-  return process.argv[index + 1] || '';
+  return index === -1 ? '' : String(process.argv[index + 1] || '');
 }
 
-function passwordHash(password, salt) {
-  return crypto.scryptSync(String(password || ''), salt, 64).toString('hex');
+function requiredEnv(...names) {
+  const entry = names
+    .map((name) => [name, String(process.env[name] || '').trim()])
+    .find(([, value]) => value);
+  if (!entry) throw new Error(`Falta configurar ${names.join(' o ')}.`);
+  return entry[1];
 }
 
-function buildPasswordHash(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  return `scrypt:${salt}:${passwordHash(password, salt)}`;
-}
-
-function assertConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key || key.includes('...') || key.length < 80) {
-    throw new Error('Configura NEXT_PUBLIC_SUPABASE_URL y una SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY real antes de crear usuarios.');
+function assertBootstrapEmail(email) {
+  if (email !== EXTERNAL_BOOTSTRAP_EMAIL) {
+    throw new Error('Las cuentas @cmcing.cl se aprovisionan por Microsoft SSO. Este comando queda reservado al superadmin externo autorizado.');
   }
+}
 
-  return { url, key };
+async function findAuthUserByEmail(supabase, email) {
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) throw error;
+    const found = data.users.find((user) => String(user.email || '').toLowerCase() === email);
+    if (found) return found;
+    if (data.users.length < 100) return null;
+  }
+  throw new Error('No fue posible completar la búsqueda segura del usuario en Supabase Auth.');
 }
 
 const email = readArg('email').trim().toLowerCase();
 const password = readArg('password');
-const nombre = readArg('name').trim() || email;
-const rol = (readArg('role').trim() || 'ADMIN').toUpperCase();
-const tecnicoIdArg = readArg('tecnico-id').trim();
-const tecnicoId = tecnicoIdArg ? Number(tecnicoIdArg) : null;
+const nombre = readArg('name').trim() || 'Carlos';
+const rol = (readArg('role').trim() || 'SUPERADMIN').toUpperCase();
 
 if (!email || !password) {
-  console.error('Uso: npm run create:user -- --email admin@cmcing.cl --password "clave" --name "Admin CMCing" --role ADMIN');
+  console.error('Uso: npm run create:user -- --email correo --password "clave-segura" --name "Nombre" --role SUPERADMIN');
+  process.exit(1);
+}
+if (password.length < 12) {
+  console.error('La contraseña debe tener al menos 12 caracteres.');
+  process.exit(1);
+}
+if (!ALLOWED_ROLES.has(rol)) {
+  console.error(`Rol inválido: ${rol}.`);
   process.exit(1);
 }
 
 async function main() {
-  const { url, key } = assertConfig();
+  assertBootstrapEmail(email);
+  const url = requiredEnv('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL');
+  const key = requiredEnv('SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY');
   const supabase = createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+    auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const payload = {
-    nombre,
-    email,
-    passwordHash: buildPasswordHash(password),
-    rol,
-    tecnicoId,
-    activo: true,
-  };
+  let authUser = await findAuthUserByEmail(supabase, email);
+  if (authUser) {
+    const { data, error } = await supabase.auth.admin.updateUserById(authUser.id, {
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: nombre },
+    });
+    if (error) throw error;
+    authUser = data.user;
+  } else {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: nombre },
+    });
+    if (error) throw error;
+    authUser = data.user;
+  }
 
   const { data: existing, error: findError } = await supabase
     .from('Usuario')
     .select('id')
     .ilike('email', email)
     .maybeSingle();
+  if (findError) throw findError;
 
-  if (findError) throw new Error(findError.message);
-
+  const profile = {
+    nombre,
+    email,
+    passwordHash: null,
+    rol,
+    authUserId: authUser.id,
+    provider: 'email',
+    activo: true,
+    emailVerifiedAt: new Date().toISOString(),
+  };
   const query = existing
-    ? supabase.from('Usuario').update(payload).eq('id', existing.id)
-    : supabase.from('Usuario').insert(payload);
-
-  const { data, error } = await query.select('id,email,rol,tecnicoId,activo').single();
-  if (error) throw new Error(error.message);
+    ? supabase.from('Usuario').update(profile).eq('id', existing.id)
+    : supabase.from('Usuario').insert(profile);
+  const { data, error } = await query.select('id,email,rol,tecnicoId,activo,authUserId').single();
+  if (error) throw error;
 
   console.log(JSON.stringify({ ok: true, user: data }, null, 2));
 }

@@ -1,65 +1,45 @@
-# ContextIA - Demo
+# ContextIA - Runtime y experiencia 360
 
-## Estado vigente
+Última actualización: 2026-08-04.
 
-Ultima actualizacion: 2026-06-02.
-El modo demo fue retirado del runtime. La aplicacion queda en modo produccion, con APIs conectadas directo a Supabase.
+## Decisión vigente
 
-## Objetivo del modulo
+CMCing no tiene un modo demo operativo. Las pantallas productivas leen Supabase y deben mostrar el error real cuando faltan sesión, política, esquema o integración; no pueden simular que una OT, actividad, matriz o evidencia fue guardada.
 
-Registrar la decision de no volver a depender de datos en memoria para flujos operativos o comerciales.
+`app/lib/demo-store.js` aún existe como archivo heredado, pero no tiene importaciones desde `app/`. Debe tratarse como deuda de limpieza, no como fallback permitido.
 
-## Fuentes de verdad y sistemas externos
+## Navegación 360
 
-- Datos runtime:
-  - `app/lib/supabase-store.js`
-  - Supabase/Postgres
-- Shell y navegacion:
-  - `app/components/AppShell.js`
-  - `app/components/AppSidebar.js`
-  - `app/layout.js`
-- Offline local:
-  - `app/lib/offline-queue.js`
-  - `public/sw.js`
-- R2:
-  - `app/lib/r2.js`
-  - `app/api/tecnico/sync/route.js`
+- `AppShell` y `AppSidebar` mantienen acceso global a OT, actividades, matrices, equipos, clientes, personas, transporte e informes.
+- `CommandCenter` ofrece navegación con teclado y recientes para llegar a módulos desde cualquier contexto.
+- Las fichas de maestros concentran datos, relaciones e historial en lugar de dispersar acciones en pantallas aisladas.
+- En selecciones de negocio se prioriza `ComboBox`/`MultiComboBox`; las mediciones se pueden crear en el mismo listado.
+- Las transiciones son suaves y respetan `prefers-reduced-motion`.
 
-## Flujo funcional real
+## App técnica
 
-- Login protege paginas y APIs usando usuarios `Usuario` en Supabase.
-- Sidebar izquierda organiza los modulos comerciales, operativos, personas e informes.
-- CRUD maestro sigue disponible en `/admin?modulo=...`, con persistencia real.
-- Cotizaciones permiten crear, exportar PDF y enviar por MS Graph.
-- Equipos es la pantalla unica para el maestro de equipos: permite buscar por SKU, serial, nombre y cliente, crear, editar, eliminar, revisar imagen, servicios relacionados y hoja de vida.
-- La pantalla `/equipos` opera como vista 360: desde equipo se puede abrir detalle de cliente, servicio, tecnico y visita relacionada; al abrir un equipo relacionado se cambia la ficha activa.
-- Calendario lista visitas agrupadas por dia.
-- App tecnica `/tecnico` guarda servicios en IndexedDB si no hay senal.
-- Al volver la conexion, la cola intenta sincronizar contra `/api/tecnico/sync`.
-- `/api/tecnico/sync` recibe `clientMutationId`, lo persiste en `Visita.clienteMutationId` para idempotencia, sube firma/selfie/evidencias privadas a R2 y elimina duplicados al reintentar.
-- `/api/r2/private` sirve adjuntos privados solo con sesion valida para que informes internos puedan mostrar firma/selfie sin URL publica.
-- En mobile y tablet, la navegacion cambia a topbar con drawer lateral.
+- `/tecnico` es una superficie móvil dedicada y offline-first, separada del backoffice.
+- IndexedDB conserva snapshot, borradores, blobs y outbox por usuario.
+- El service worker puede reabrir el shell técnico sin red después de una carga previa, pero APIs y autenticación son network-only.
+- La cola se sincroniza con RPC de OT/actividad; no crea `Visita` nueva.
+- Logout o cambio de usuario debe limpiar/aislar la partición local para evitar exposición cruzada.
 
-## Decisiones tecnicas vigentes
+## Fronteras de producto
 
-- No se muestra contexto tecnico en la UI; esta informacion queda en `ContextIA`.
-- `app/lib/demo-store.js` fue eliminado.
-- La app tecnica captura adjuntos, firma dibujada, texto de firma y selfie frontal al firmar.
-- QA 2026-05-29 valido la app tecnica con Cristian Manzor: firma completa, selfie frontal simulada, foto/PDF de evidencia, cola servidor `SINCRONIZADO` y segundo envio respondio `duplicate`.
-- Service worker cachea recursos GET visitados para mejorar uso offline despues de la primera carga, pero los assets `/_next/` y las APIs `/api/*` se resuelven network-first para evitar CSS/JS o datos obsoletos despues de cambios de UI/backend.
-- `app/offline-register.js` fuerza `registration.update()` y recarga al cambiar el controller para activar rapido nuevas versiones de cache.
-- Breakpoints vigentes: sidebar fijo en escritorio, drawer off-canvas bajo 900px, tablas de maestros convertidas a fichas bajo 760px, paddings reducidos bajo 720px/520px y tablas secundarias con scroll horizontal controlado.
-- Equipos no vive en `/admin?modulo=equipos` porque requiere lectura visual y relaciones operativas; la URL antigua redirige a `/equipos`.
-- `Nueva visita` no vive como item independiente del sidebar; `/nueva-visita` redirige a `/admin?modulo=visitas&nuevo=1` para abrir el alta dentro de Visitas.
+- OpenAI se muestra como no configurado mientras falte `OPENAI_API_KEY`; nunca debe simular una mejora.
+- Una integración R2, correo o PDF que falle conserva un estado visible/reintentable; no se marca como completada por optimismo de UI.
+- Capacidades todavía no validadas E2E deben presentarse como pendientes/no disponibles. El correo Auth llegó hasta `202 Accepted` de Graph y ledger `ACCEPTED`; la activación sigue pendiente hasta que Carlos acepte la invitación e ingrese.
 
-## Riesgos y bugs conocidos
+## Validación publicada
 
-- IndexedDB local depende del dispositivo/navegador del tecnico.
-- La sincronizacion real requiere variables R2 completas.
-- Los adjuntos no deben publicarse con URL directa. La UI debe usar el endpoint autenticado `/api/r2/private` y las firmas deben quedar bajo `private/firmas/tecnicos`.
-- Sin llaves reales de Supabase no se puede iniciar sesion ni probar CRUD.
+Producción está publicada en `https://cm-cing.vercel.app`. Se verificaron build remoto, salud profunda Supabase, login, redirección Microsoft, protecciones anónimas, headers, consola, service worker y viewports 320/375/390/768 sin overflow.
 
-## Pendientes reales y proximos pasos
+Siguen pendientes recorridos que requieren usuarios, datos y archivos reales:
 
-- Agregar indicador de conflictos si un maestro cambia mientras hay trabajos offline.
-- Agregar pruebas E2E de la app tecnica en modo offline/online.
+- ciclo real OT → actividad → matrices → imágenes → cierre → bloqueo → desbloqueo;
+- offline cerrar/reabrir navegador y recuperar conexión;
+- permisos negativos entre roles/técnicos;
+- primer login de ambos superadmins y rechazo de una identidad no permitida;
+- carga/lectura R2 y emisión autenticada/versionada del PDF.
+
+No confundir que una ruta compile o que el esquema exista con una validación E2E del producto.

@@ -15,6 +15,10 @@ Todo cambio funcional, tecnico o estrategico en el codigo debe reflejarse tambie
 - `ContextIA/Demo.md`
 - `ContextIA/Supabase.md`
 - `ContextIA/Auth.md`
+- `ContextIA/ServicioTecnico.md`
+- `ContextIA/Cloudflare.md`
+- `ContextIA/Cotizaciones.md`
+- `ContextIA/CSS.md`
 
 ## Como mantener estos contextos
 
@@ -55,3 +59,13 @@ Despues de modificar un modulo:
 Si un cambio afecta varios modulos:
 
 - actualizar cada `.md` correspondiente, no centralizar todo en un solo archivo.
+
+## Consistencia visual obligatoria
+
+> Debemos procurar siempre alinear verticalmente los elementos contiguos horizontalmente dentro de un cuadro en común.
+
+En formularios, se marca exclusivamente lo obligatorio con un asterisco rojo junto al título. Todo campo que no tenga asterisco se considera opcional; no se deben añadir rótulos de `Opcional` que alteren la alineación vertical. Las reglas de implementación y clases vigentes se mantienen en `ContextIA/CSS.md`.
+
+## Entorno local CMCing
+
+El puerto local reservado permanentemente para esta aplicación es `3022`. Los scripts `npm run dev` y `npm run start` deben conservar `--port 3022`; las instrucciones, pruebas manuales y enlaces locales del proyecto usan `http://localhost:3022`.

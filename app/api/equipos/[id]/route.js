@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
-import { deleteEntity, getEquipo, updateEntity } from '../../../lib/supabase-store';
+import { routeError } from '../../../lib/api-response';
+import { updateEquipment } from '../../../lib/equipment-service';
+import { requireRequestRole, requireRequestUser } from '../../../lib/request-auth';
+import { deleteEntity, getEquipo } from '../../../lib/supabase-store';
 
 export async function GET(request, { params }) {
   try {
+    await requireRequestUser(request);
     const { id } = await params;
     const equipo = await getEquipo(id);
     if (!equipo) {
@@ -10,26 +14,28 @@ export async function GET(request, { params }) {
     }
     return NextResponse.json(equipo);
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeError(error);
   }
 }
 
 export async function PUT(request, { params }) {
   try {
+    await requireRequestRole(request, ['SUPERADMIN', 'ADMIN', 'OPERACIONES']);
     const { id } = await params;
     const body = await request.json();
-    const equipo = await updateEntity('equipos', id, body);
+    const equipo = await updateEquipment(id, body);
     if (!equipo) {
       return NextResponse.json({ error: 'Equipo not found' }, { status: 404 });
     }
     return NextResponse.json(equipo);
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeError(error);
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
+    await requireRequestRole(request, ['SUPERADMIN', 'ADMIN', 'OPERACIONES']);
     const { id } = await params;
     const deleted = await deleteEntity('equipos', id);
     if (!deleted) {
@@ -37,6 +43,6 @@ export async function DELETE(request, { params }) {
     }
     return NextResponse.json({ message: 'Equipo deleted' });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeError(error);
   }
 }

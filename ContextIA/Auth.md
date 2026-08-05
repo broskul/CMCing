@@ -1,91 +1,67 @@
-# ContextIA - Auth
+# ContextIA - Identidad y autorización
 
-## Estado vigente
+Última actualización: 2026-08-04.
 
-Ultima actualizacion: 2026-06-27.
-La autenticacion directa usa usuarios reales en Supabase. Ya no existen credenciales locales ni usuarios bootstrap embebidos en runtime. Login real validado contra `Usuario`.
+## Fuente de verdad
 
-## Objetivo del modulo
+Supabase Auth administra la identidad y `Usuario` administra autorización, rol y estado activo. `auth.users.id` se vincula de forma única con `Usuario.authUserId`; el runtime no confía en roles guardados en `user_metadata` ni en valores enviados por el cliente.
 
-Permitir acceso controlado con usuario y contrasena sin depender de Microsoft/Entra para login de la aplicacion. Microsoft Graph queda solo para envio de correos.
+Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash local y los usuarios demo. `passwordHash` sólo se conserva nullable por compatibilidad histórica y no debe recibir contraseñas nuevas.
 
-## Fuentes de verdad y sistemas externos
+## Política de acceso
 
-- Runtime actual:
-  - `app/lib/auth.js`
-  - `app/api/auth/login/route.js`
-  - `app/api/auth/logout/route.js`
-  - `app/api/auth/session/route.js`
-  - `middleware.js`
-- Supabase:
-  - tabla `Usuario`
-  - tabla `Tecnico` para vinculo opcional `Usuario.tecnicoId`
-- Bootstrap operativo:
-  - `scripts/create-user.mjs`
-- Migracion reciente:
-  - se replicaron los usuarios reales de `Usuario` al proyecto nuevo `vgfoubwwxqkrtpymzbat`
+- El dominio `@cmcing.cl` ingresa con Microsoft Entra ID mediante el proveedor Azure de Supabase.
+- `cmanzor@cmcing.cl` es el superadmin corporativo previsto por Azure.
+- `carlos@prof3sional.com` es el único superadmin externo permitido por email de Supabase; esto no autoriza todo el dominio `prof3sional.com`.
+- `AuthAccessRule` conserva las reglas del servidor. Una regla EMAIL exacta prevalece sobre una regla DOMAIN.
+- El hook `public.cmc_before_user_created_hook` rechaza proveedor o identidad no permitidos y asigna el rol inicial desde la base de datos.
 
-## Flujo funcional real
+## Estado externo verificado
 
-1. Usuario ingresa en `/login` con identificador y contrasena. El campo visual se llama `Usuario` y acepta tanto correos como identificadores cortos de prueba.
-2. Backend busca ese identificador en `Usuario.email` usando Supabase server-side.
-3. Backend valida `passwordHash` con formato `scrypt:salt:hash`.
-4. Se crea cookie HTTP-only `cmcing_session`.
-5. La cookie contiene una sesion stateless firmada con HMAC y expiracion de 12 horas.
-6. `middleware.js` exige cookie firmada y vigente para paginas y APIs internas.
-7. Sidebar permite cerrar sesion con `POST /api/auth/logout`.
+- Proveedor Azure de Supabase: activo.
+- Redirect de Entra ID a Supabase: configurado.
+- URL de sitio y redirects productivos/locales de Supabase: configurados.
+- Hook `Before User Created` conectado a `public.cmc_before_user_created_hook`: activo.
+- Login publicado en `https://cm-cing.vercel.app/login`: verificado sin errores de consola; el botón Microsoft llega al tenant/client ID correctos y conserva el callback productivo por Supabase.
+- Carlos ya existe como usuario invitado: su perfil `Usuario` es `SUPERADMIN`, usa provider `email` y quedó `authLinked = true`; la cuenta aún no está confirmada.
+- La activación/login de Carlos depende de que acepte la invitación. El primer ingreso Azure de `cmanzor@cmcing.cl` y la prueba de una cuenta rechazada siguen pendientes.
 
-## Configuracion vigente
+## Flujo de runtime
 
-Variables requeridas:
+1. `/login` inicia Microsoft SSO o el acceso administrativo por email.
+2. `/api/auth/microsoft` inicia OAuth PKCE y `/auth/callback` intercambia el código por una sesión Supabase.
+3. Los enlaces de correo llegan a `/auth/confirm`; una acción humana ejecuta `verifyOtp` para evitar que un escáner consuma el enlace automáticamente.
+4. `proxy.js` refresca la sesión, resuelve `Usuario` y aplica las fronteras globales de ruta.
+5. Cada API sensible vuelve a validar sesión y rol. En actividades, también valida que un técnico sólo opere sobre asignaciones propias.
+6. PostgreSQL refuerza la misma frontera mediante RLS y helpers `cmc_can_access_*`.
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY` o `NEXT_PUBLIC_SUPABASE_ANON_KEY` con permisos suficientes.
+## Roles
 
-Variable recomendada:
+- `SUPERADMIN`: control total, reglas de acceso y desbloqueo.
+- `ADMIN`: administración y desbloqueo auditado.
+- `OPERACIONES`: maestros, OT y asignaciones; no desbloquea actividades cerradas.
+- `TECNICO`: su jornada, actividades asignadas, notas, matrices, imágenes y cierre.
+- `LECTURA`: consulta sin mutaciones.
 
-- `APP_SESSION_SECRET`
+## Superadmin externo
 
-Si `APP_SESSION_SECRET` no existe, la firma de sesion usa `SUPABASE_SERVICE_ROLE_KEY`, `MSGRAPH_CLIENT_SECRET` o la llave anon como respaldo.
+`npm run create:user` sirve únicamente para aprovisionar o rotar `carlos@prof3sional.com` mediante Supabase Admin Auth. Exige una llave privada del servidor y una contraseña de al menos 12 caracteres, vincula `Usuario.authUserId` y no almacena hash local ni rol en metadata. No se usa para cuentas `@cmcing.cl`.
 
-Para crear o actualizar un usuario real:
+## Correo de autenticación
 
-```bash
-npm run create:user -- --email correo@dominio.cl --password "clave-segura" --name "Nombre Usuario" --role ADMIN
-```
+La Edge Function `supabase/functions/send-auth-email` implementa un Send Email Hook con validación Standard Webhooks y envío por Microsoft Graph. En la invitación real de Carlos, Supabase respondió `200`, Graph aceptó el envío con `202` y `AuthEmailDelivery` registró tipo `invite`, estado `ACCEPTED`, `attempts = 1` y ningún error. Esta evidencia valida el pipeline hasta la aceptación de Graph, no la entrega final al buzón ni la confirmación: Carlos todavía debe aceptar el enlace e iniciar sesión.
 
-Para una cuenta de prueba con identificador corto:
+## Archivos clave
 
-```bash
-npm run create:user -- --email admin --password "admin123" --name "Admin Pruebas" --role ADMIN
-```
+- `app/lib/supabase-auth-server.js`: cliente SSR asociado a la cookie del usuario.
+- `app/lib/auth.js`: resolución y vinculación del perfil.
+- `app/lib/request-auth.js`: guardas de APIs.
+- `app/lib/activity-access.js`: propiedad de actividad y autorización por rol.
+- `proxy.js`: sesión y fronteras globales.
+- `supabase/migrations/20260804091000_identity_auth_rbac.sql`: allowlist, hooks y helpers.
+- `supabase/migrations/20260804104000_rls_views_security.sql`: políticas RLS finales.
+- `scripts/create-user.mjs`: bootstrap restringido del superadmin externo.
 
-Para una cuenta tecnica asociada:
+## Límite de validación
 
-```bash
-npm run create:user -- --email tecnico@dominio.cl --password "clave-segura" --name "Nombre Tecnico" --role TECNICO --tecnico-id 1
-```
-
-## Decisiones tecnicas vigentes
-
-- Auth directa por usuario/contrasena, no SSO.
-- `Usuario.email` sigue siendo el campo persistido para el login, aunque el frontend no exige formato email para permitir usuarios cortos controlados.
-- Passwords se comparan con hash `scrypt` y `timingSafeEqual`.
-- No se aceptan credenciales por defecto en produccion.
-- `Usuario.tecnicoId` vincula cuentas tecnicas con el maestro `Tecnico`.
-- Logout borra la cookie; las sesiones son stateless y expiran por timestamp interno.
-- El conjunto actual migrado incluye `Carlos Rodriguez` y `Admin Pruebas`, con hashes y timestamps preservados.
-
-## Riesgos y bugs conocidos
-
-- La autorizacion fina por rol aun no esta implementada; hoy una sesion valida entra a todos los endpoints internos.
-- QA 2026-05-29: `Usuario` ya aparece en PostgREST, `npm run create:user` funciona y login real fue validado con cookie HTTP-only.
-- Si la llave server configurada no corresponde al proyecto o no tiene permisos sobre `Usuario`, login y bootstrap fallan.
-- Si se cambia otra vez de proyecto Supabase, hay que repetir la copia de `Usuario` y resembrar la secuencia `id`.
-- Falta pantalla administrativa para cambio de contrasena.
-
-## Pendientes reales y proximos pasos
-
-- Agregar cambio de contrasena y administracion de usuarios.
-- Definir permisos por rol en cada endpoint CRUD.
-- Migrar `middleware.js` a la convencion `proxy` de Next cuando se haga mantencion tecnica.
+La configuración de proveedor, hook, correo hasta aceptación de Graph, rutas públicas y redirección SSO están verificadas. Falta QA E2E con usuarios reales: aceptación/login de Carlos, primer ingreso de `cmanzor@cmcing.cl`, MFA/consentimiento si Entra lo exige y rechazo de una identidad no permitida. No documentar la autenticación como completamente validada hasta cerrar esos recorridos.
