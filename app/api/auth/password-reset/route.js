@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { isPasswordAuthEmail } from '../../../lib/auth';
+import { isAllowedAuthEmail } from '../../../lib/auth';
 import { createSupabaseServerClient } from '../../../lib/supabase-auth-server';
 
-const GENERIC_MESSAGE = 'Si el correo corresponde a una cuenta de acceso administrativo, recibirás instrucciones para definir una nueva contraseña.';
+const GENERIC_MESSAGE = 'Si el correo corresponde a una cuenta CMCing habilitada, recibirás instrucciones para definir una nueva contraseña.';
 
 function response(message = GENERIC_MESSAGE, status = 200) {
   return NextResponse.json({ message }, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -28,8 +28,10 @@ export async function POST(request) {
   const email = String(body?.email || '').trim().toLowerCase();
   if (!email) return response();
 
-  // Nunca revelar si existe una cuenta: sólo el acceso administrativo local puede usar contraseña.
-  if (!isPasswordAuthEmail(email)) return response();
+  // Supabase sólo entrega el enlace a identidades existentes. La respuesta se
+  // mantiene idéntica para no revelar si el correo existe y no se permite alta
+  // de cuentas desde este flujo.
+  if (!isAllowedAuthEmail(email)) return response();
 
   try {
     const supabase = await createSupabaseServerClient();

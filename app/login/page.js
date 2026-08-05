@@ -54,7 +54,7 @@ function LoginForm() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) throw new Error(data?.error || 'No fue posible procesar la solicitud. Inténtalo nuevamente.');
-      setRecoveryMessage(data?.message || 'Si el correo corresponde a una cuenta de acceso administrativo, recibirás instrucciones para definir una nueva contraseña.');
+      setRecoveryMessage(data?.message || 'Si el correo corresponde a una cuenta CMCing habilitada, recibirás instrucciones para definir una nueva contraseña.');
     } catch (recoveryError) {
       setRecoveryMessage(recoveryError.message || 'No fue posible procesar la solicitud. Inténtalo nuevamente.');
     } finally {
@@ -110,10 +110,10 @@ function LoginForm() {
       >
         {microsoftLoading ? 'Conectando con Microsoft...' : 'Continuar con Microsoft 365'}
       </button>
-      <p className="text-center text-[0.76rem] text-neutral-500">Acceso corporativo para cuentas @cmcing.cl</p>
+      <p className="text-center text-[0.76rem] text-neutral-500">También puedes ingresar con tu cuenta corporativa Microsoft 365.</p>
       <div className="flex items-center gap-3" aria-hidden="true">
         <span className="h-px flex-1 bg-neutral-200" />
-        <span className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-neutral-400">acceso administrativo</span>
+        <span className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-neutral-400">o con contraseña</span>
         <span className="h-px flex-1 bg-neutral-200" />
       </div>
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -152,11 +152,11 @@ function LoginForm() {
       <div className="border-t border-neutral-200 pt-5">
         <p className="text-[0.82rem] font-medium text-neutral-700">¿Olvidaste o necesitas cambiar tu contraseña?</p>
         <p className="mt-1 text-[0.76rem] leading-5 text-neutral-500">
-          Este flujo es sólo para el acceso administrativo con contraseña. Las cuentas @cmcing.cl usan su contraseña de Microsoft 365.
+          Ingresa el correo con el que accedes a CMCing. Si tu cuenta está habilitada, recibirás un enlace seguro para definir una contraseña.
         </p>
         <form onSubmit={handlePasswordRecovery} className="mt-3 space-y-3">
           <label className="block text-[0.86rem] font-medium text-neutral-700">
-            Correo de acceso administrativo<RequiredMarker />
+            Correo de acceso<RequiredMarker />
             <input
               type="email"
               value={recoveryEmail}

@@ -70,7 +70,7 @@ export default function UpdatePasswordPage() {
         <div className="space-y-2 text-center">
           <p className="text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-sky-700">Acceso protegido</p>
           <h1 className="text-[1.45rem] font-semibold text-neutral-900">Define tu nueva contraseña</h1>
-          <p className="text-[0.86rem] leading-6 text-neutral-600">Esta contraseña se usa sólo para el acceso administrativo local de CMCing.</p>
+          <p className="text-[0.86rem] leading-6 text-neutral-600">Podrás usar esta contraseña para ingresar a CMCing, además de Microsoft 365 si tu cuenta corporativa está vinculada.</p>
         </div>
 
         {message ? <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[0.86rem] text-rose-700">{message}</p> : null}

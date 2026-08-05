@@ -32,12 +32,23 @@ function identityProviders(authUser) {
   return providers;
 }
 
-function assertAllowedAuthProvider(authUser, email) {
+export function isAllowedAuthProvider(authUser, value) {
+  const email = normalizedEmail(value);
   const providers = identityProviders(authUser);
-  const requiredProvider = EXCEPTION_EMAILS.has(email) ? 'email' : 'azure';
-  const exactProvider = providers.size === 1 && providers.has(requiredProvider);
+  if (!isAllowedAuthEmail(email) || providers.size === 0) return false;
 
-  if (!exactProvider) {
+  // Una cuenta corporativa puede conservar Azure y añadir email/password
+  // mediante un enlace de recuperación. Ambos métodos apuntan al mismo
+  // usuario Auth y al mismo perfil CMCing; no se permiten otros proveedores.
+  const allowedProviders = EXCEPTION_EMAILS.has(email)
+    ? new Set(['email'])
+    : new Set(['azure', 'email']);
+
+  return [...providers].every((provider) => allowedProviders.has(provider));
+}
+
+function assertAllowedAuthProvider(authUser, email) {
+  if (!isAllowedAuthProvider(authUser, email)) {
     throw authError(
       'El proveedor de identidad no está autorizado para esta cuenta.',
       403,
@@ -70,10 +81,6 @@ export function isAllowedAuthEmail(value) {
   const email = normalizedEmail(value);
   return Boolean(email)
     && (email.endsWith('@cmcing.cl') || EXCEPTION_EMAILS.has(email));
-}
-
-export function isPasswordAuthEmail(value) {
-  return EXCEPTION_EMAILS.has(normalizedEmail(value));
 }
 
 export function safeNextPath(value, fallback = '/') {

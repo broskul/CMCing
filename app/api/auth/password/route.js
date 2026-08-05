@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isPasswordAuthEmail, resolveAppUser } from '../../../lib/auth';
+import { resolveAppUser } from '../../../lib/auth';
 import { createSupabaseServerClient } from '../../../lib/supabase-auth-server';
 
 const MIN_PASSWORD_LENGTH = 12;
@@ -45,12 +45,13 @@ export async function POST(request) {
       return NextResponse.json({ error: 'El enlace de recuperación no está activo. Solicita uno nuevo.' }, { status: 401 });
     }
 
-    if (!isPasswordAuthEmail(data.user.email)) {
+    try {
+      await resolveAppUser(data.user);
+    } catch {
       await supabase.auth.signOut({ scope: 'local' });
-      return NextResponse.json({ error: 'Las cuentas corporativas se administran con Microsoft 365.' }, { status: 403 });
+      return NextResponse.json({ error: 'Esta cuenta no está habilitada para definir una contraseña.' }, { status: 403 });
     }
 
-    await resolveAppUser(data.user);
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       return NextResponse.json({ error: 'No fue posible actualizar la contraseña. Solicita un enlace nuevo e inténtalo nuevamente.' }, { status: 400 });

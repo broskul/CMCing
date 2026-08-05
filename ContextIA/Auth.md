@@ -13,7 +13,7 @@ Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash 
 - El dominio `@cmcing.cl` ingresa con Microsoft Entra ID mediante el proveedor Azure de Supabase.
 - `cmanzor@cmcing.cl` es el superadmin corporativo previsto por Azure.
 - `carlos@prof3sional.com` es el único superadmin externo permitido por email de Supabase; esto no autoriza todo el dominio `prof3sional.com`.
-- Sólo `carlos@prof3sional.com` puede usar y recuperar una contraseña local. Las identidades `@cmcing.cl` conservan como único método de ingreso Microsoft 365 / Entra ID.
+- Cualquier identidad Supabase ya existente que pertenezca al dominio o excepción autorizados puede solicitar una contraseña desde el login. El acceso efectivo sigue requiriendo un perfil `Usuario` CMCing activo. Para cuentas corporativas, Supabase enlaza el método email/password a la misma identidad Azure; Microsoft 365 sigue disponible como alternativa de ingreso.
 - `AuthAccessRule` conserva las reglas del servidor. Una regla EMAIL exacta prevalece sobre una regla DOMAIN.
 - El hook `public.cmc_before_user_created_hook` rechaza proveedor o identidad no permitidos y asigna el rol inicial desde la base de datos.
 
@@ -29,10 +29,10 @@ Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash 
 
 ## Flujo de runtime
 
-1. `/login` inicia Microsoft SSO o el acceso administrativo por email. Los campos obligatorios se señalan con asterisco rojo; el resto se interpreta como opcional.
+1. `/login` inicia Microsoft SSO o el acceso por email/contraseña. Los campos obligatorios se señalan con asterisco rojo; el resto se interpreta como opcional.
 2. `/api/auth/microsoft` inicia OAuth PKCE y `/auth/callback` intercambia el código por una sesión Supabase.
 3. Los enlaces de correo llegan a `/auth/confirm`; una acción humana ejecuta `verifyOtp` para evitar que un escáner consuma el enlace automáticamente.
-4. La recuperación local solicita `POST /api/auth/password-reset`, que responde de forma no enumerativa y sólo envía el enlace a la identidad administrativa permitida. Tras confirmar un enlace `recovery`, `/auth/update-password` exige una contraseña de al menos 12 caracteres con minúscula, mayúscula, número y símbolo; actualiza mediante la sesión de recuperación y la cierra.
+4. La recuperación solicita `POST /api/auth/password-reset`, que responde de forma no enumerativa para todas las identidades Supabase existentes dentro del dominio o excepción autorizados. Tras confirmar un enlace `recovery`, `/auth/update-password` exige una contraseña de al menos 12 caracteres con minúscula, mayúscula, número y símbolo; valida el perfil `Usuario` activo, actualiza mediante la sesión de recuperación, enlaza el método email/password si la identidad venía de Azure y cierra la sesión de recuperación.
 5. `proxy.js` refresca la sesión, resuelve `Usuario` y aplica las fronteras globales de ruta.
 6. Cada API sensible vuelve a validar sesión y rol. En actividades, también valida que un técnico sólo opere sobre asignaciones propias.
 7. PostgreSQL refuerza la misma frontera mediante RLS y helpers `cmc_can_access_*`.
@@ -57,7 +57,7 @@ La Edge Function `supabase/functions/send-auth-email` implementa un Send Email H
 
 - `app/lib/supabase-auth-server.js`: cliente SSR asociado a la cookie del usuario.
 - `app/lib/auth.js`: resolución y vinculación del perfil.
-- `app/api/auth/password-reset/route.js`: solicitud de recuperación no enumerativa y restringida a la identidad email permitida.
+- `app/api/auth/password-reset/route.js`: solicitud de recuperación no enumerativa para identidades Supabase existentes dentro del alcance CMCing.
 - `app/api/auth/password/route.js` y `app/auth/update-password/page.js`: actualización validada mediante sesión de recuperación, sin persistir contraseñas.
 - `app/lib/request-auth.js`: guardas de APIs.
 - `app/lib/activity-access.js`: propiedad de actividad y autorización por rol.
