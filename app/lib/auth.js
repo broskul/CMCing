@@ -72,6 +72,10 @@ export function isAllowedAuthEmail(value) {
     && (email.endsWith('@cmcing.cl') || EXCEPTION_EMAILS.has(email));
 }
 
+export function isPasswordAuthEmail(value) {
+  return EXCEPTION_EMAILS.has(normalizedEmail(value));
+}
+
 export function safeNextPath(value, fallback = '/') {
   const candidate = String(value || '').trim();
   if (!candidate.startsWith('/') || candidate.startsWith('//') || candidate.includes('\\')) {

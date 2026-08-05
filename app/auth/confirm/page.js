@@ -65,9 +65,10 @@ function ConfirmAccess() {
         throw new Error(sessionResult?.error || 'La cuenta no tiene acceso habilitado a CMCing.');
       }
 
+      const recovery = type === 'recovery';
       setStatus('success');
-      setMessage('Identidad confirmada. Ingresando a CMCing...');
-      router.replace(next);
+      setMessage(recovery ? 'Identidad confirmada. Define tu nueva contraseña.' : 'Identidad confirmada. Ingresando a CMCing...');
+      router.replace(recovery ? '/auth/update-password' : next);
       router.refresh();
     } catch (error) {
       setStatus('error');
@@ -100,7 +101,7 @@ function ConfirmAccess() {
         disabled={!validRequest || status === 'verifying' || status === 'success'}
         className="w-full rounded-lg bg-neutral-900 px-4 py-2.5 text-[0.92rem] font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {status === 'verifying' ? 'Confirmando...' : status === 'success' ? 'Confirmado' : 'Confirmar y continuar'}
+        {status === 'verifying' ? 'Confirmando...' : status === 'success' ? 'Confirmado' : type === 'recovery' ? 'Confirmar y crear contraseña' : 'Confirmar y continuar'}
       </button>
 
       <Link href="/login" className="block text-center text-[0.82rem] font-medium text-sky-700 hover:text-sky-900">

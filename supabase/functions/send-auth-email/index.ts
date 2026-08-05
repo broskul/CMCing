@@ -48,7 +48,7 @@ function escapeHtml(value: unknown) {
 }
 
 function allowedOrigins() {
-  return new Set(String(Deno.env.get('AUTH_ALLOWED_ORIGINS') || 'https://cm-cing.vercel.app,http://localhost:3000')
+  return new Set(String(Deno.env.get('AUTH_ALLOWED_ORIGINS') || 'https://cm-cing.vercel.app,http://localhost:3022')
     .split(',').map((value) => value.trim()).filter(Boolean));
 }
 

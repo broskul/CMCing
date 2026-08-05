@@ -1,6 +1,6 @@
 # ContextIA - Identidad y autorización
 
-Última actualización: 2026-08-04.
+Última actualización: 2026-08-05.
 
 ## Fuente de verdad
 
@@ -13,6 +13,7 @@ Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash 
 - El dominio `@cmcing.cl` ingresa con Microsoft Entra ID mediante el proveedor Azure de Supabase.
 - `cmanzor@cmcing.cl` es el superadmin corporativo previsto por Azure.
 - `carlos@prof3sional.com` es el único superadmin externo permitido por email de Supabase; esto no autoriza todo el dominio `prof3sional.com`.
+- Sólo `carlos@prof3sional.com` puede usar y recuperar una contraseña local. Las identidades `@cmcing.cl` conservan como único método de ingreso Microsoft 365 / Entra ID.
 - `AuthAccessRule` conserva las reglas del servidor. Una regla EMAIL exacta prevalece sobre una regla DOMAIN.
 - El hook `public.cmc_before_user_created_hook` rechaza proveedor o identidad no permitidos y asigna el rol inicial desde la base de datos.
 
@@ -28,12 +29,13 @@ Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash 
 
 ## Flujo de runtime
 
-1. `/login` inicia Microsoft SSO o el acceso administrativo por email.
+1. `/login` inicia Microsoft SSO o el acceso administrativo por email. Los campos obligatorios se señalan con asterisco rojo; el resto se interpreta como opcional.
 2. `/api/auth/microsoft` inicia OAuth PKCE y `/auth/callback` intercambia el código por una sesión Supabase.
 3. Los enlaces de correo llegan a `/auth/confirm`; una acción humana ejecuta `verifyOtp` para evitar que un escáner consuma el enlace automáticamente.
-4. `proxy.js` refresca la sesión, resuelve `Usuario` y aplica las fronteras globales de ruta.
-5. Cada API sensible vuelve a validar sesión y rol. En actividades, también valida que un técnico sólo opere sobre asignaciones propias.
-6. PostgreSQL refuerza la misma frontera mediante RLS y helpers `cmc_can_access_*`.
+4. La recuperación local solicita `POST /api/auth/password-reset`, que responde de forma no enumerativa y sólo envía el enlace a la identidad administrativa permitida. Tras confirmar un enlace `recovery`, `/auth/update-password` exige una contraseña de al menos 12 caracteres con minúscula, mayúscula, número y símbolo; actualiza mediante la sesión de recuperación y la cierra.
+5. `proxy.js` refresca la sesión, resuelve `Usuario` y aplica las fronteras globales de ruta.
+6. Cada API sensible vuelve a validar sesión y rol. En actividades, también valida que un técnico sólo opere sobre asignaciones propias.
+7. PostgreSQL refuerza la misma frontera mediante RLS y helpers `cmc_can_access_*`.
 
 ## Roles
 
@@ -49,18 +51,24 @@ Se retiró del flujo vigente la cookie HMAC `cmcing_session`, el login por hash 
 
 ## Correo de autenticación
 
-La Edge Function `supabase/functions/send-auth-email` implementa un Send Email Hook con validación Standard Webhooks y envío por Microsoft Graph. En la invitación real de Carlos, Supabase respondió `200`, Graph aceptó el envío con `202` y `AuthEmailDelivery` registró tipo `invite`, estado `ACCEPTED`, `attempts = 1` y ningún error. Esta evidencia valida el pipeline hasta la aceptación de Graph, no la entrega final al buzón ni la confirmación: Carlos todavía debe aceptar el enlace e iniciar sesión.
+La Edge Function `supabase/functions/send-auth-email` implementa un Send Email Hook con validación Standard Webhooks y envío por Microsoft Graph. Incluye plantillas CMC para recuperación y aviso de cambio de contraseña. El secreto remoto `AUTH_ALLOWED_ORIGINS` permite únicamente producción y `http://localhost:3022`; la función fue desplegada con esa frontera el 2026-08-05. En la invitación real de Carlos, Supabase respondió `200`, Graph aceptó el envío con `202` y `AuthEmailDelivery` registró tipo `invite`, estado `ACCEPTED`, `attempts = 1` y ningún error. Esta evidencia valida el pipeline hasta la aceptación de Graph, no la entrega final al buzón ni la confirmación: Carlos todavía debe aceptar el enlace e iniciar sesión.
 
 ## Archivos clave
 
 - `app/lib/supabase-auth-server.js`: cliente SSR asociado a la cookie del usuario.
 - `app/lib/auth.js`: resolución y vinculación del perfil.
+- `app/api/auth/password-reset/route.js`: solicitud de recuperación no enumerativa y restringida a la identidad email permitida.
+- `app/api/auth/password/route.js` y `app/auth/update-password/page.js`: actualización validada mediante sesión de recuperación, sin persistir contraseñas.
 - `app/lib/request-auth.js`: guardas de APIs.
 - `app/lib/activity-access.js`: propiedad de actividad y autorización por rol.
 - `proxy.js`: sesión y fronteras globales.
 - `supabase/migrations/20260804091000_identity_auth_rbac.sql`: allowlist, hooks y helpers.
 - `supabase/migrations/20260804104000_rls_views_security.sql`: políticas RLS finales.
 - `scripts/create-user.mjs`: bootstrap restringido del superadmin externo.
+
+## Redirects locales
+
+La configuración versionada y el panel de Supabase permiten `http://localhost:3022/auth/callback` y `http://localhost:3022/auth/confirm`. Producción conserva el origen `https://cm-cing.vercel.app`; cualquier cambio del panel de Supabase debe añadir redirects, nunca sustituir el origen productivo por el local.
 
 ## Límite de validación
 
