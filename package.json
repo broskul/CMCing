@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",
     "seed": "node scripts/create-user.mjs",
-    "create:user": "node scripts/create-user.mjs"
+    "create:user": "node scripts/create-user.mjs",
+    "supabase:apply": "node scripts/apply-supabase-migration.mjs",
+    "supabase:verify:equipment": "node scripts/verify-equipment-schema.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1056.0",

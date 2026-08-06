@@ -1,6 +1,6 @@
 # ContextIA - Supabase
 
-Última actualización: 2026-08-04.
+Última actualización: 2026-08-05.
 
 ## Objetivo
 
@@ -36,8 +36,8 @@ La confirmación OpenAPI prueba presencia del esquema remoto, no por sí sola ca
 - El propietario es obligatorio: un cliente real o el registro técnico `CMCing · Equipo propio`. El trigger rechaza cualquier cambio posterior de `clienteId`.
 - La identificación de catálogo usa `nombre`, `fabricante`, `modelo`, `partNumber`, `serial` opcional y `ean` opcional (8, 13 o 14 dígitos). No existen maestros separados de fabricantes, modelos o Part Number: los valores del propio maestro de equipos son el catálogo de sugerencias.
 - `criticidad` ya no pertenece a `Equipo`. La columna canónica vive en `OrdenTrabajo`; un trigger la mantiene sincronizada con `prioridad` mientras el cliente técnico móvil conserva esa compatibilidad.
-- La migración `20260804114000_equipo_identidad_imagenes_y_criticidad_ot.sql` contiene el renombre de `sku` a `partNumber`, EAN, owner CMCing, código incremental, inmutabilidad y criticidad de OT. Está preparada localmente y debe aplicarse al proyecto remoto antes de usar el flujo publicado.
-- El selector de propietario, tanto en Equipos como en el alta contextual desde una OT, obtiene los clientes desde `Cliente`; si aún falta `esEmpresaCMCing`, conserva esos clientes disponibles y muestra una advertencia visible. La opción especial CMCing y el alta completa requieren la migración, pero un error de catálogo no debe dejar el cuadro combinado vacío en silencio.
+- La migración `20260804114000_equipo_identidad_imagenes_y_criticidad_ot.sql` fue aplicada en producción el 2026-08-05 mediante SQL Editor. Se verificaron por Data API `Equipo.partNumber`, `Equipo.ean`, metadata R2, `Cliente.esEmpresaCMCing` y `OrdenTrabajo.criticidad`.
+- El selector de propietario, tanto en Equipos como en el alta contextual desde una OT, obtiene los clientes desde `Cliente`; conserva un fallback visible si el catálogo no responde, sin ocultar clientes existentes.
 
 ## Integridad y auditoría
 
@@ -77,6 +77,8 @@ Cada mutación usa `clientMutationId`, hash del request y revisión esperada. Re
 - `app/api/tecnico/bootstrap/route.js`: snapshot de jornada autorizado.
 - `app/api/tecnico/sync/route.js`: mutaciones offline atómicas.
 - `supabase/migrations/`: fuente canónica del esquema.
+- `scripts/apply-supabase-migration.mjs`: aplica un único archivo versionado por Supabase Management API; exige `SUPABASE_ACCESS_TOKEN` y evita depender del navegador.
+- `scripts/verify-equipment-schema.mjs`: valida por Data API los campos canónicos de equipos, propietario y criticidad.
 - `prisma/schema.prisma`: referencia secundaria; puede quedar desfasada y requiere introspección antes de usarse como contrato.
 
 ## Pendientes reales
@@ -86,4 +88,4 @@ Cada mutación usa `clientMutationId`, hash del request y revisión esperada. Re
 - Definir backups/PITR y un procedimiento de recuperación antes de considerar cerrada la continuidad operacional.
 - Completar la aceptación de la invitación y el primer login de Carlos; la aceptación `202` de Graph no acredita confirmación del usuario.
 - Regenerar tipos/introspección si el frontend necesita cobertura completa de las 42 tablas.
-- Aplicar y verificar `20260804114000_equipo_identidad_imagenes_y_criticidad_ot.sql` con una credencial de administración de base de datos o de Supabase Management correspondiente a CMCing; la fuente actual de CMCing no tiene `DIRECT_URL` ni `DATABASE_URL` utilizables.
+- Registrar en el vault de CMCing `SUPABASE_ACCESS_TOKEN` con permiso de Management API para ejecutar futuras migraciones mediante `Vault.ps1 Run`. La llave privada de la app mantiene acceso al Data API, pero no reemplaza ese permiso de DDL.

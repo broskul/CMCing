@@ -49,6 +49,8 @@ CMMS de producción para organizar el servicio técnico de CMCing mediante órde
 
 Las migraciones de `supabase/migrations` son la fuente canónica del esquema. `prisma/schema.prisma` se mantiene sólo como referencia y puede requerir una nueva introspección después de cambios SQL.
 
+Para operar Supabase sin el navegador, configurar `SUPABASE_ACCESS_TOKEN` únicamente en la fuente local cifrada por el vault y ejecutar la migración explícita con `npm run supabase:apply -- <archivo.sql>`. La verificación remota del contrato de equipos se realiza con `npm run supabase:verify:equipment`; ambos comandos deben ejecutarse mediante `Vault.ps1 Run` para no exponer credenciales.
+
 El puerto local permanente de CMCing es `3022`: tanto `npm run dev` como `npm run start` lo fijan explícitamente.
 
 ## Fronteras de seguridad
